@@ -1,0 +1,21 @@
+<!doctype html><meta charset=utf-8>
+<html>
+    <head>
+        <style>
+        body {
+            background-image: url("background.jpg");
+        }        
+        </style>
+        <script src="/public/jquery-3.3.1.min.js"></script>
+        <script type="text/javascript">
+            setInterval(function() {
+                $.get('/imagedata', function(data) {
+                    $('#image').attr('src', data);
+                });
+            }, 30);
+        </script>
+    </head>
+    <body>
+        <img id="image" src=""/>
+    </body>
+</html>

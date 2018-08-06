@@ -1,0 +1,2 @@
+go build -o invaders.app/Contents/MacOS/invaders
+cp -R public invaders.app/Contents/MacOS
