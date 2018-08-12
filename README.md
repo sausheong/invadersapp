@@ -10,15 +10,15 @@ However, Electron is pretty heavy, uses quite a bit of Javascript and has tonnes
 
 Then I stumbled on this little Go library called [webview](https://github.com/zserge/webview). Webview is tiny and simple library that wraps around webview (MacOS), MSHTML (Windows) and gtk-webkit2 (Linux). Its documentation for the Go part is just a page or so! 
 
-
-# Serve the frames
-
 Let's take stock at what we need to do:
 
 1. Build a web app that will serve out the frames
-2. Create the webview that will show the web app
+2. Show the web app on the webview
+3. Make changes to the game logic to make it work
 
-## Build the web app
+That's all! Let's go.
+
+# Build the web app
 
 We start off with spinning out a separate goroutine to run the web app, then displaying a static HTML page from the webview.
 
@@ -125,10 +125,9 @@ func getFrame(w http.ResponseWriter, r *http.Request) {
 
 At every interval, the webview will call `getFrame` for the frame. The frame is a [image data URI](https://en.wikipedia.org/wiki/Data_URI_scheme) with the base64 encoded image. This is then passed on to the `<img>` tag in the HTML template (which we'll see later). Notice that we set the `Cache-Control` header to `no-cache`. This is a workaround for MSHTML (in Windows specifically) because otherwise the image frame will cached and the game will be stuck at the first frame.
 
-# Show the frames
+# Show the web app on the webview
 
-
-The frames are shown on a HTML page. The start page, doesn't need to be animated (or can be animated through a video clip or a gif) so it can be a totally static page.
+The frames are shown on a HTML page that will be displayed on the webview. The start page, doesn't need to be animated (or can be animated through a video clip or a gif) so it can be a totally static HTML page.
 
 
 ```go
@@ -205,23 +204,6 @@ This is how it looks on a Mac.
 ![Space Invaders on a Mac](images/mac-invaders.png)
 
 
-# Play some sound
-
-Games work better with game sounds and effects. I got the Space Invaders special effect sounds from [Classics United](http://www.classicgaming.cc/classics/space-invaders/sounds) website and also used the [Beep](https://github.com/faiface/beep) package to play them.  
-
-```go
-// play a sound
-func playSound(name string) {
-	f, _ := os.Open(dir + "/public/sounds/" + name + ".wav")
-	s, format, _ := wav.Decode(f)
-	speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/20))
-	speaker.Play(s)
-}
-```
-
-Playing the sound effect is simply getting the WAV file, decode it and play it back. Unfortunately the package closes the file after decoding it so I have to reopen the file every time, but it works well enough.
-
-
 # Game logic changes
 
 Let's look at the changes I need to make to the game logic next. Most of the code doesn't change. However the game is on a webview so the controls will be also be on the webview itself. This means I don't need to use termbox any more. Instead, I just capture keyboard events sent to the webview using the JQuery `keydown` method and send it to the `key` handler. The `key` handler in turn adds it into the `event` channel (previously I send the termbox keyboard event into the channel).
@@ -258,6 +240,24 @@ for !gameOver {
 ```
 
 See how I play the sound after each time I detect the string `32` (captured from the keyboard event), which indicates the space bar being pressed.
+
+## Play some sound
+
+Games work better with game sounds and effects. I got the Space Invaders special effect sounds from [Classics United](http://www.classicgaming.cc/classics/space-invaders/sounds) website and also used the [Beep](https://github.com/faiface/beep) package to play them.  
+
+```go
+// play a sound
+func playSound(name string) {
+	f, _ := os.Open(dir + "/public/sounds/" + name + ".wav")
+	s, format, _ := wav.Decode(f)
+	speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/20))
+	speaker.Play(s)
+}
+```
+
+Playing the sound effect is simply getting the WAV file, decode it and play it back. Unfortunately the package closes the file after decoding it so I have to reopen the file every time, but it works well enough.
+
+## Show game scores at the end game
 
 Something else that changes in the game is the way the scores are displayed. When the game ended previously I simply showed the scores on the terminal. Now that I don't have a terminal to display the scores on, the best to do it is on the screen. What I need to is write text on the end game frame.
 
