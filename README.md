@@ -222,7 +222,7 @@ Playing the sound effect is simply getting the WAV file, decode it and play it b
 
 # Game logic changes
 
-Let's first look at the changes I need to make to the Space Invaders game. Most of the code doesn't change, but because we now show the game on a webview so the controls will be on the webview itself. This means I don't need to use Termbox any more. Instead, I just capture keyboard events sent to the webview using the JQuery `keydown` method and send it to the `key` handler. The `key` handler in turn adds it into the `event` channel (previously I send the termbox keyboard event into the channel).
+Let's look at the changes I need to make to the game logic next. Most of the code doesn't change, but because we now show the game on a webview so the controls will be on the webview itself. This means I don't need to use Termbox any more. Instead, I just capture keyboard events sent to the webview using the JQuery `keydown` method and send it to the `key` handler. The `key` handler in turn adds it into the `event` channel (previously I send the termbox keyboard event into the channel).
 
 In the main game loop, instead of checking for the termbox keyboard events, I check for the keyboard events from the webview.
 
