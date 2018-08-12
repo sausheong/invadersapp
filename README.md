@@ -59,7 +59,7 @@ func main() {
 }
 ```
 
-Note how creating the webview is just a single line of code!
+See how creating the webview is just a single line of code! If you compare this with Electron, this is pretty awesome. Electron has quite a bit more features of course, but for something simple and straightforward, you just can't beat this.
 
 The web app is simple and straightforward.
 
@@ -224,7 +224,7 @@ Playing the sound effect is simply getting the WAV file, decode it and play it b
 
 # Game logic changes
 
-Let's look at the changes I need to make to the game logic next. Most of the code doesn't change, but because we now show the game on a webview so the controls will be on the webview itself. This means I don't need to use Termbox any more. Instead, I just capture keyboard events sent to the webview using the JQuery `keydown` method and send it to the `key` handler. The `key` handler in turn adds it into the `event` channel (previously I send the termbox keyboard event into the channel).
+Let's look at the changes I need to make to the game logic next. Most of the code doesn't change. However the game is on a webview so the controls will be also be on the webview itself. This means I don't need to use termbox any more. Instead, I just capture keyboard events sent to the webview using the JQuery `keydown` method and send it to the `key` handler. The `key` handler in turn adds it into the `event` channel (previously I send the termbox keyboard event into the channel).
 
 In the main game loop, instead of checking for the termbox keyboard events, I check for the keyboard events from the webview.
 
@@ -257,7 +257,7 @@ for !gameOver {
 }
 ```
 
-Note how I play the sound after each time I detect the string `32`, which indicates the space bar being pressed.
+See how I play the sound after each time I detect the string `32` (captured from the keyboard event), which indicates the space bar being pressed.
 
 Something else that changes in the game is the way the scores are displayed. When the game ended previously I simply showed the scores on the terminal. Now that I don't have a terminal to display the scores on, the best to do it is on the screen. What I need to is write text on the end game frame.
 
@@ -295,7 +295,7 @@ createFrame(endScreen)
 
 # Building the app
 
-To build the app on Mac, just use the `build-macOS` script. It should build the app and then place it accordingly into the `invaders.app` application package. With that you can just double-click on the app and you're done!
+To build the app on Mac, just use the `build-macOS` script. It should build the app and then place it accordingly into the `invaders.app` application package. With that you can just double-click on the app and start playing!
 
 To build the app on Windows, use this command:
 
