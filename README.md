@@ -59,6 +59,8 @@ func main() {
 }
 ```
 
+Note how creating the webview is just a single line of code!
+
 The web app is simple and straightforward.
 
 ```go
@@ -291,6 +293,19 @@ printLine(endScreen, 137, 260, "Press 'q' to quit", color.RGBA{255, 0, 0, 255})
 createFrame(endScreen)
 ```
 
+# Building the app
+
+To build the app on Mac, just use the `build-macOS` script. It should build the app and then place it accordingly into the `invaders.app` application package. With that you can just double-click on the app and you're done!
+
+To build the app on Windows, use this command:
+
+```
+go build -ldflags="-H windowsgui" -o invaders.exe
+```
+
+After that you should have an `invaders.exe` binary executable file which you can then double-click to start playing.
+
+
 # Source code
 
 You can find the source code here.
@@ -314,4 +329,5 @@ Have fun!
 
 # Thank yous
 
-A shout-out to Ibrahim Wu, who helped me to debug the app on Windows and also discovered the problem with MSHTML caching.
+* A shout-out to Ibrahim Wu, who helped me to debug the app on Windows and also discovered the problem with MSHTML caching.
+* Thanks to Serge Zaitsev for his amazing [webview](https://github.com/zserge/webview) package!
