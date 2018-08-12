@@ -14,25 +14,25 @@ import (
 	"path/filepath"
 	"time"
 
-	"golang.org/x/image/font/inconsolata"
+	"github.com/zserge/webview"
 
 	"github.com/faiface/beep/speaker"
 	"github.com/faiface/beep/wav"
-	"github.com/zserge/webview"
+
 	"golang.org/x/image/font"
+	"golang.org/x/image/font/inconsolata"
 	"golang.org/x/image/math/fixed"
 )
 
-var frame string       // game frames
-var dir string         // current directory
-var events chan string // keyboard events
-var gameOver = false   // end of game
+var frame string                         // game frames
+var dir string                           // current directory
+var events chan string                   // keyboard events
+var gameOver = false                     // end of game
+var windowWidth, windowHeight = 400, 300 // width and height of the window
+var frameRate int                        // how many frames to show per second (fps)
+var gameDelay int                        // delay time added to each game loop
 
-// width and height of the window
-var windowWidth, windowHeight = 400, 300
-
-// main function
-func main() {
+func init() {
 	// events is a channel of string events that come from the front end
 	events = make(chan string, 1000)
 	// getting the current directory to access resources
@@ -41,21 +41,26 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	src = getImage(dir + "/public/images/sprites.png")
-	background = getImage(dir + "/public/images/bg.png")
+	frameRate = 50                                         // 50 fps
+	gameDelay = 20                                         // 20 ms delay
+	sprites = getImage(dir + "/public/images/sprites.png") // spritesheet
+	background = getImage(dir + "/public/images/bg.png")   // background image
+}
 
+// main function
+func main() {
 	// run the web server in a separate goroutine
-	go server()
-
+	go app()
 	// create a web view
-	err = webview.Open("Space Invaders", "http://127.0.0.1:12346/public/html/index.html", windowWidth, windowHeight, false)
+	err := webview.Open("Space Invaders", "http://127.0.0.1:12346/public/html/index.html",
+		windowWidth, windowHeight, false)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-// web server
-func server() {
+// web app
+func app() {
 	mux := http.NewServeMux()
 	mux.Handle("/public/", http.StripPrefix("/public/", http.FileServer(http.Dir(dir+"/public"))))
 	mux.HandleFunc("/start", start)
@@ -73,7 +78,7 @@ func start(w http.ResponseWriter, r *http.Request) {
 	t, _ := template.ParseFiles(dir + "/public/html/invaders.html")
 	// start generating frames in a new goroutine
 	go generateFrames()
-	t.Execute(w, "")
+	t.Execute(w, 1000/frameRate)
 }
 
 // capture keyboard events
@@ -92,12 +97,13 @@ func captureKeys(w http.ResponseWriter, r *http.Request) {
 	} else {
 		events <- ev
 	}
-
+	w.Header().Set("Cache-Control", "no-cache")
 }
 
 // get the game frames
 func getFrame(w http.ResponseWriter, r *http.Request) {
 	str := "data:image/png;base64," + frame
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Write([]byte(str))
 }
 
