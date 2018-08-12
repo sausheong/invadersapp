@@ -2,7 +2,7 @@
 
 A few months ago I fiddled around with [writing Space Invaders using Go](https://sausheong.github.io/posts/space-invaders-with-go). I had a lot of fun writing it but the output only worked on iTerm2 because it used a specific feature of that terminal. In order to play the game you'd really have to download iTerm2 and run it on the command line. I thought it'd be fun to muck around it a bit more to see if I can bring it out as a proper desktop game.
 
-![Space Invaders](images/space-invaders.jpg)
+![Space Invaders](images/space-invaders.png)
 
 Now, if you know much about Go at all you would know that there simply isn't any good GUI toolkit or library. Go wasn't designed with UI in mind so there certainly aren't any UI packages in the standary library. There is the usual GTK and QT bindings, but generally I try to avoid bindings if I can help it. The more popular way of writing desktop apps in Go is really to create a web app and then front it with a browser like interface. A common way of doing this is using [Electron](https://electronjs.org), a framework used to write cross-platform desktop apps using Javascript, HTML and CSS. Plenty of desktop apps have used Electron, including Slack and Github's desktop apps, and even the editor I'm using now (Visual Studio Code).
 
