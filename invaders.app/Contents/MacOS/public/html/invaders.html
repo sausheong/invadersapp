@@ -1,0 +1,30 @@
+<!doctype html><meta charset=utf-8>
+<html>
+    <head>
+        <style>
+        body {
+            background-image: url("/public/images/background.jpg");
+            background-repeat: no-repeat;           
+            margin: 0;
+        }        
+        </style>
+        <script src="/public/js/jquery-3.3.1.min.js"></script>
+        <script type="text/javascript">
+            setInterval(function() {
+                $.get('/frame', function(data) {
+                    $('#image').attr('src', data);
+                });
+            }, {{ . }});
+
+            $("body,html").keydown(function( event ) {
+                if ( event.which == 13 ) {
+                    event.preventDefault();
+                }
+                $.get('/key?event='+event.which);
+            });               
+        </script>
+    </head>
+    <body>
+        <img id="image" src="" style="display: block;"/>
+    </body>
+</html>

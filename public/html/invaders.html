@@ -7,9 +7,6 @@
             background-repeat: no-repeat;           
             margin: 0;
         }        
-        #image {
-            display: block;
-        }
         </style>
         <script src="/public/js/jquery-3.3.1.min.js"></script>
         <script type="text/javascript">
@@ -17,18 +14,17 @@
                 $.get('/frame', function(data) {
                     $('#image').attr('src', data);
                 });
-            }, 20);
+            }, {{ . }});
 
             $("body,html").keydown(function( event ) {
                 if ( event.which == 13 ) {
                     event.preventDefault();
                 }
                 $.get('/key?event='+event.which);
-            });
-                
+            });               
         </script>
     </head>
     <body>
-        <img id="image" src=""/>
+        <img id="image" src="" style="display: block;"/>
     </body>
 </html>
