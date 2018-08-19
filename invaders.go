@@ -19,6 +19,8 @@ var bombSpeed = 10
 // sprites
 var sprites image.Image
 var background image.Image
+var backgroundWidth int
+var backgroundHeight int
 var cannonSprite = image.Rect(20, 47, 38, 59)
 var cannonExplode = image.Rect(0, 47, 16, 57)
 var alien1Sprite = image.Rect(0, 0, 20, 14)
@@ -123,7 +125,7 @@ func generateFrames() {
 		}
 
 		// create background
-		dst := image.NewRGBA(image.Rect(0, 0, windowWidth, windowHeight))
+		dst := image.NewRGBA(image.Rect(0, 0, backgroundWidth, backgroundHeight))
 		gift.New().Draw(dst, background)
 
 		// process aliens
@@ -170,7 +172,7 @@ func generateFrames() {
 		}
 
 		// move the aliens back and forth
-		if aliens[0].Position.X < alienSize || aliens[aliensPerRow-1].Position.X > windowWidth-(2*alienSize) {
+		if aliens[0].Position.X < alienSize || aliens[aliensPerRow-1].Position.X > backgroundWidth-(2*alienSize) {
 			alienDirection = alienDirection * -1
 			for i := 0; i < len(aliens); i++ {
 				aliens[i].Position.Y = aliens[i].Position.Y + 10
