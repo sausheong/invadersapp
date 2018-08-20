@@ -8,7 +8,7 @@ Now, if you know much about Go at all you would know that there simply isn't any
 
 However, Electron is pretty heavy, uses quite a bit of Javascript and has tonnes of documentation to wade through. I was  looking for something Go-oriented and simple to just kickstart. More importantly I simply wanted to use what I already created earlier, which is nothing much more than simply displaying a series of images rapidly such that it looks properly animated.
 
-Then I stumbled on this little Go library called [webview](https://github.com/zserge/webview). Webview is tiny and simple library that wraps around webview (MacOS), MSHTML (Windows) and gtk-webkit2 (Linux). Its documentation for the Go part is just a page or so! 
+Then I stumbled on this little Go library called [webview](https://github.com/zserge/webview). Webview is tiny and simple library that wraps around webview (MacOS), MSHTML (Windows) and gtk-webkit2 (Linux). Its documentation for the Go part is just a page or so!
 
 Let's take stock at what we need to do:
 
@@ -138,7 +138,7 @@ The frames are shown on a HTML page that will be displayed on the webview. The s
         body {
             background-image: url("/public/images/start.png");
             background-repeat: no-repeat;
-        }        
+        }
         </style>
         <script src="/public/js/jquery-3.3.1.min.js"></script>
         <script type="text/javascript">
@@ -149,7 +149,7 @@ The frames are shown on a HTML page that will be displayed on the webview. The s
                 if ( event.which == 83 ) {
                     window.location.href="/start";
                 }
-            });               
+            });
         </script>
     </head>
 </html>
@@ -157,7 +157,7 @@ The frames are shown on a HTML page that will be displayed on the webview. The s
 
 It just captures keyboard events through JQuery, and redirects to `start` handler when `s` is pressed. This will start the game.
 
-Once we start the game, the game loop is triggered and frames are created repeatedly. A `gameDelay` variable is introduced in the game loop to slow down the game if it becomes too fast. Displaying the frames is all about using JQuery and retrieving frame one at a time regular interval. 
+Once we start the game, the game loop is triggered and frames are created repeatedly. A `gameDelay` variable is introduced in the game loop to slow down the game if it becomes too fast. Displaying the frames is all about using JQuery and retrieving frame one at a time regular interval.
 
 To do this, I simply used `setInterval`, with the frequency provided by the `start` handler. The function in `setInterval` uses the Jquery `get` method to retrieve the data URI from the `frame` handler, and changes the value in the `src` attribute of the `<img>` tag with the `image` ID.
 
@@ -243,7 +243,7 @@ See how I play the sound after each time I detect the string `32` (captured from
 
 ## Play some sound
 
-Games work better with game sounds and effects. I got the Space Invaders special effect sounds from [Classics United](http://www.classicgaming.cc/classics/space-invaders/sounds) website and also used the [Beep](https://github.com/faiface/beep) package to play them.  
+Games work better with game sounds and effects. I got the Space Invaders special effect sounds from [Classics United](http://www.classicgaming.cc/classics/space-invaders/sounds) website and also used the [Beep](https://github.com/faiface/beep) package to play them.
 
 ```go
 // play a sound
@@ -295,6 +295,14 @@ createFrame(endScreen)
 
 # Building the app
 
+First, you'll need to install the dependencies, if you don't already have them:
+
+```sh
+go get github.com/disintegration/gift
+go get github.com/faiface/beep/speaker
+go get github.com/faiface/beep/wav
+```
+
 To build the app on Mac, just use the `build-macOS` script. It should build the app and then place it accordingly into the `invaders.app` application package. With that you can just double-click on the app and start playing!
 
 To build the app on Windows, use this command:
@@ -314,7 +322,7 @@ https://github.com/sausheong/invadersapp
 
 # How it looks
 
-That's all there is to it! I didn't go through the game code because I've already explained it in the previous [blog post](https://sausheong.github.io/posts/space-invaders-with-go). 
+That's all there is to it! I didn't go through the game code because I've already explained it in the previous [blog post](https://sausheong.github.io/posts/space-invaders-with-go).
 
 In the mean time, here's how it looks on Windows. The response is a bit shaky because I don't actually own a Windows machine and tested it and created the video on a VirtualBox VM.
 
