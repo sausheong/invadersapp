@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"flag"
 	"fmt"
 	"html/template"
 	"image"
@@ -46,18 +47,25 @@ func init() {
 	gameDelay = 20                                         // 20 ms delay
 	sprites = getImage(dir + "/public/images/sprites.png") // spritesheet
 	background = getImage(dir + "/public/images/bg.png")   // background image
+	backgroundWidth = background.Bounds().Size().X
+	backgroundHeight = background.Bounds().Size().Y
 }
 
 // main function
 func main() {
+	flag.IntVar(&windowWidth, "width", windowWidth, "Window width")
+	flag.IntVar(&windowHeight, "height", windowHeight, "Window height")
+	resize := flag.Bool("resize", true, "resizable")
+	flag.Parse()
+
 	// channel to get the web prefix
 	prefixChannel := make(chan string)
 	// run the web server in a separate goroutine
 	go app(prefixChannel)
-	prefix := <- prefixChannel
+	prefix := <-prefixChannel
 	// create a web view
-	err := webview.Open("Space Invaders", prefix + "/public/html/index.html",
-		windowWidth, windowHeight, false)
+	err := webview.Open("Space Invaders", prefix+"/public/html/index.html",
+		windowWidth, windowHeight, *resize)
 	if err != nil {
 		log.Fatal(err)
 	}
