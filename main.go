@@ -23,6 +23,7 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/inconsolata"
 	"golang.org/x/image/math/fixed"
+	"net"
 )
 
 var frame string                         // game frames
@@ -57,10 +58,13 @@ func main() {
 	resize := flag.Bool("resize", true, "resizable")
 	flag.Parse()
 
+	// channel to get the web prefix
+	prefixChannel := make(chan string)
 	// run the web server in a separate goroutine
-	go app()
+	go app(prefixChannel)
+	prefix := <-prefixChannel
 	// create a web view
-	err := webview.Open("Space Invaders", "http://127.0.0.1:12346/public/html/index.html",
+	err := webview.Open("Space Invaders", prefix+"/public/html/index.html",
 		windowWidth, windowHeight, *resize)
 	if err != nil {
 		log.Fatal(err)
@@ -68,14 +72,23 @@ func main() {
 }
 
 // web app
-func app() {
+func app(prefixChannel chan string) {
 	mux := http.NewServeMux()
 	mux.Handle("/public/", http.StripPrefix("/public/", http.FileServer(http.Dir(dir+"/public"))))
 	mux.HandleFunc("/start", start)
 	mux.HandleFunc("/frame", getFrame)
 	mux.HandleFunc("/key", captureKeys)
+
+	// get an ephemeral port, so we're guaranteed not to conflict with anything else
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+	portAddress := listener.Addr().String()
+	prefixChannel <- "http://" + portAddress
+	listener.Close()
 	server := &http.Server{
-		Addr:    "127.0.0.1:12346",
+		Addr:    portAddress,
 		Handler: mux,
 	}
 	server.ListenAndServe()
