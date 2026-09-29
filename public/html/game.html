@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Space Invaders</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+  }
+  img {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    image-rendering: pixelated;
+  }
+</style>
+</head>
+<body>
+<img id="screen" alt="Space Invaders">
+<script>
+  var img = document.getElementById('screen');
+  var seq = 0;
+
+  async function loop() {
+    try {
+      var f = await frame(seq);
+      seq = f.seq;
+      if (f.src !== '') img.src = f.src;
+    } catch (e) {}
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.repeat) return;
+    if (e.code === 'Space' || e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'Enter') {
+      e.preventDefault();
+    }
+    keyDown(e.keyCode);
+  });
+  document.addEventListener('keyup', function (e) {
+    keyUp(e.keyCode);
+  });
+</script>
+</body>
+</html>

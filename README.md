@@ -1,6 +1,6 @@
 # Space Invaders
 
-A small cross-platform desktop Space Invaders game written in Go. The game renders every frame on the Go side and shows it in a native webview window, so there's no game engine or GUI toolkit involved — just images, a tiny web server and a browser view.
+A small cross-platform desktop Space Invaders game written in Go. The game renders every frame on the Go side and shows it in a native webview window — no game engine, no GUI toolkit, and (as of v0.3.0) no web server either: the window talks straight to Go through [webview_go](https://github.com/webview/webview_go)'s `Bind`.
 
 ![Space Invaders](images/space-invaders.jpg)
 
@@ -12,35 +12,48 @@ The story behind the app, and a walkthrough of how it was built, is in the origi
 
 | Key | Action |
 |---|---|
-| `s` | Start the game (and play again after game over) |
-| `←` / `→` | Move the laser cannon |
+| `s` | Start the game, and restart after game over |
+| `←` / `→` | Move the laser cannon (hold to keep moving) |
 | `Space` | Fire |
-| `q` | End the current game; on the game over screen, quit the app |
+| `p` | Pause / resume |
+| `q` | Quit to the title screen while playing; quit the app from the title screen |
 
-Aliens in the top row are worth 30 points, the middle row 20 and the bottom row 10. The game ends when an alien bomb hits your cannon or the aliens march down to your level.
+Aliens in the top row are worth 30 points, the middle row 20 and the bottom row 10. You have multiple lives per game, and the aliens come in waves — clear one and a faster, tougher wave marches in behind it. Destructible shields give you cover from alien bombs, and a bonus UFO occasionally crosses the top of the screen for extra points. The game keeps a running high score across plays. It's over for good when you lose your last life.
 
 ## How it works
 
-The app has three parts, all in one Go binary:
+The whole game is one Go binary with **no web server and no browser involved** — just a native OS webview window bound directly to Go functions:
 
-1. **A local web server** (`main.go`) listening on an ephemeral port on `127.0.0.1`. It serves the static pages in `public/` and three endpoints:
-   * `/start` — starts the game loop and returns the game page
-   * `/frame` — returns the latest frame as a base64 PNG data URI
-   * `/key?event=<keyCode>` — passes a key press to the game loop
-2. **The game loop** (`invaders.go`), running in its own goroutine. Each tick it moves the sprites, checks collisions, draws everything onto an image with [gift](https://github.com/disintegration/gift), and stores it as the current frame. The end screen text is drawn with `golang.org/x/image/font`.
-3. **A native webview window** ([webview_go](https://github.com/webview/webview_go)) pointed at the local server. The page polls `/frame` and sends key presses back with plain JavaScript.
+1. **The game loop** (`invaders.go` and friends), running in its own goroutine, owns all game state. Each tick it moves sprites, checks collisions, draws everything onto an image with [gift](https://github.com/disintegration/gift), and encodes it as a PNG data URI, tagged with an incrementing sequence number.
+2. **A native webview window** (`main.go`, via [webview_go](https://github.com/webview/webview_go)) hosts a tiny embedded HTML page (`public/html/game.html`) and binds three Go functions straight into its JavaScript global scope with `w.Bind`:
+   * `frame(lastSeq)` — the page calls this in a `requestAnimationFrame` loop; Go returns the current sequence number and, only when it has changed, the new frame as a data URI
+   * `keyDown(code)` / `keyUp(code)` — the page's `keydown`/`keyup` listeners call these directly with the JS key code
+   Each bound call crosses into Go and back as a JSON-marshalled Promise; there's no HTTP, no polling endpoint, and no port to manage.
+3. **Assets are embedded** (`assets.go`, via `//go:embed public`) — the sprite sheet, backgrounds, sounds and the HTML page all live inside the compiled binary, decoded on demand. That means `go run .` works from a source checkout, and a distributed binary or app bundle needs no `public/` folder alongside it.
 
-Sound effects are played with [beep](https://github.com/gopxl/beep) (`sound.go`). The sounds are loaded into memory once at startup.
+Sound effects are played with [beep](https://github.com/gopxl/beep) (`sound.go`), reading their `.wav` data out of the same embedded filesystem. The sounds are decoded into memory once at startup.
 
 ```
 .
-├── main.go            web server, webview window, frame encoding
-├── invaders.go        game loop, sprites, collisions
-├── sound.go           sound loading and playback
-├── invaders_test.go   unit tests
-├── public/            HTML pages, sprite sheet, backgrounds, sounds
-├── invaders.app/      macOS app bundle
-└── build-macOS        builds the macOS app bundle
+├── main.go              webview window, Bind wiring, quit handling
+├── assets.go            //go:embed public + asset accessors (images, HTML, sounds)
+├── sound.go             sound loading and playback
+├── invaders.go          Sprite type, collide, createAlien
+├── game.go              Game state, startNewGame/startNextWave, step() and the game loop
+├── frame.go             frame encoding (createFrame) and publishing (currentFrame)
+├── input.go             keyDown/keyUp and the thread-safe input snapshot
+├── render.go            render(): draws the current Game state to an image
+├── hud.go               printLine (bitmap text) and drawHUD (score/lives)
+├── shield.go            destructible bunker bitmap logic
+├── highscore.go         high score load/save (JSON in the user config dir)
+├── invaders_test.go     unit tests for Sprite/collide
+├── game_test.go         unit tests for game state and step()
+├── render_test.go       snapshot rendering tests (INVADERS_SNAPSHOT_DIR)
+├── shield_test.go       unit tests for shields
+├── highscore_test.go    unit tests for high score persistence
+├── public/              game HTML page, sprite sheet, backgrounds, sounds
+├── invaders.app/        macOS app bundle
+└── build-macOS          builds the macOS app bundle
 ```
 
 ## Requirements
@@ -53,7 +66,13 @@ Sound effects are played with [beep](https://github.com/gopxl/beep) (`sound.go`)
 
 ## Build and run
 
-The game loads its images and sounds from the `public/` directory next to the executable, so build a binary and run it from the project directory (`go run .` won't find the assets).
+All assets are embedded in the binary, so there's nothing to copy alongside it — `go run .` works straight from a checkout:
+
+```sh
+go run .
+```
+
+To build a standalone binary:
 
 ```sh
 go build -o invaders
@@ -73,7 +92,7 @@ go build -ldflags="-H windowsgui" -o invaders.exe
 open invaders.app
 ```
 
-This builds the binary into `invaders.app/Contents/MacOS` and copies `public/` alongside it.
+This just builds the binary into `invaders.app/Contents/MacOS` — since assets are embedded, the bundle needs nothing else alongside it.
 
 A prebuilt Apple Silicon bundle is attached to each [release](https://github.com/sausheong/invadersapp/releases). It is unsigned, so right-click it and choose **Open** the first time.
 

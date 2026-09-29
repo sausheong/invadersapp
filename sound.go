@@ -1,8 +1,8 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -32,22 +32,20 @@ func initSpeaker() error {
 	return speakerErr
 }
 
-// preloadSound decodes "<dir>/public/sounds/<name>.wav" once, resampling it
-// to speakerSampleRate if needed, and stores the decoded audio in a
-// beep.Buffer so every later play is just a cheap buffer read.
+// preloadSound decodes the embedded "public/sounds/<name>.wav" asset once,
+// resampling it to speakerSampleRate if needed, and stores the decoded audio
+// in a beep.Buffer so every later play is just a cheap buffer read.
 func preloadSound(name string) error {
-	path := dir + "/public/sounds/" + name + ".wav"
-	f, err := os.Open(path)
+	data, err := soundAsset(name)
 	if err != nil {
-		return fmt.Errorf("open %s: %w", path, err)
+		return fmt.Errorf("read embedded sound %q: %w", name, err)
 	}
 
-	streamer, format, err := wav.Decode(f)
+	streamer, format, err := wav.Decode(bytes.NewReader(data))
 	if err != nil {
-		f.Close() // wav.Decode failed before taking ownership of f
-		return fmt.Errorf("decode %s: %w", path, err)
+		return fmt.Errorf("decode embedded sound %q: %w", name, err)
 	}
-	defer streamer.Close() // closes f for us
+	defer streamer.Close()
 
 	var src beep.Streamer = streamer
 	if format.SampleRate != speakerSampleRate {
