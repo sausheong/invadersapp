@@ -20,7 +20,8 @@ import (
 
 const (
 	minInterval   = 100 * time.Millisecond // a new request at most this often
-	inFlight      = 3                      // overlapping requests, so decisions are fresher than one round trip
+	inFlight      = 6                      // overlapping requests, so decisions are fresher than one round trip
+	escapeMargin  = 5                      // extra ticks of warning before using the planned escape
 	staleAfter    = 1500 * time.Millisecond
 	timeout       = 2 * time.Second
 	startDelay    = 100 // ticks (2s) on the title or game over screen before a new game starts
@@ -42,16 +43,19 @@ type Pilot struct {
 	client  *typesafe.Client
 	stats   stats
 
-	mu        sync.Mutex
-	dest      int // spot the cannon is heading to, -1 for none
-	decidedAt time.Time
-	fire      bool
-	fireAt    target  // what Jev was told a shot would hit
-	decision  *action // latest decision, not yet handed to stats
-	pendingX  int     // chosen spot of that decision
-	nextID    int
-	lastSeq   uint64 // observation behind the latest decision used
-	idle      int    // ticks spent off the playing screen
+	mu         sync.Mutex
+	dest       int // spot the cannon is heading to, -1 for none
+	decidedAt  time.Time
+	fire       bool
+	fireAt     target  // what Jev was told a shot would hit
+	decision   *action // latest decision, not yet handed to stats
+	pendingX   int     // chosen spot of that decision
+	pendingEsc int     // escape direction planned with that decision
+	escapeDir  int     // Jev's planned escape for the decision in force: -1 left, +1 right
+	escaping   bool    // the planned escape is under way
+	nextID     int
+	lastSeq    uint64 // observation behind the latest decision used
+	idle       int    // ticks spent off the playing screen
 }
 
 // New returns an autopilot that is switched off until Toggle.
@@ -127,7 +131,7 @@ func (p *Pilot) steer(v game.View, in game.Input, now time.Time) game.Input {
 	defer p.mu.Unlock()
 	x := v.Cannon.Min.X
 	if p.decision != nil {
-		p.dest = p.pendingX
+		p.dest, p.escapeDir, p.escaping = p.pendingX, p.pendingEsc, false
 		p.decision.Move = moveStay
 		if d := p.dest - x; d >= 2 {
 			p.decision.Move = moveRight
@@ -139,6 +143,17 @@ func (p *Pilot) steer(v game.View, in game.Input, now time.Time) game.Input {
 	}
 	if p.dest >= 0 && now.Sub(p.decidedAt) > staleAfter {
 		p.dest = -1
+	}
+	// A bomb the current plan runs into before a fresh decision could
+	// arrive: carry out the escape Jev planned in advance.
+	if !p.escaping && p.escapeDir != 0 {
+		f := newForecast(v)
+		if f.hitSoon(x, p.dest, int(p.lag.Load())+escapeMargin) {
+			if ex, _ := f.escapeSpot(x, p.escapeDir); ex >= 0 {
+				p.dest, p.escaping = ex, true
+				p.stats.escapeUsed()
+			}
+		}
 	}
 	if p.dest >= 0 {
 		d := p.dest - x
@@ -232,7 +247,11 @@ func (p *Pilot) decide(o *observation) {
 	// moving average of latency, in ticks, for the next simulation
 	p.lag.Store((3*p.lag.Load() + took.Milliseconds()/20) / 4)
 
-	pick, fire := answers["spot"], answers["fire"]
+	pick, fire, esc := answers["spot"], answers["fire"], answers["escape"]
+	escDir := 1
+	if esc.Choice == escapeLeft {
+		escDir = -1
+	}
 	chosen, stay := o.Spots[0], o.Spots[0]
 	for _, s := range o.Spots {
 		if s.Key == pick.Choice {
@@ -241,7 +260,7 @@ func (p *Pilot) decide(o *observation) {
 	}
 	a := &action{
 		Situation: "safe", State: o.State, Chosen: chosen, Stay: stay.Text,
-		MoveConf: pick.Confidence, FireProb: fire.Noul,
+		MoveConf: pick.Confidence, FireProb: fire.Noul, Escape: esc.Choice,
 	}
 	if stay.Safety != safe {
 		a.Situation = "threat"
@@ -259,7 +278,7 @@ func (p *Pilot) decide(o *observation) {
 	p.lastSeq = o.seq
 	p.nextID++
 	a.ID = p.nextID
-	p.decision, p.pendingX, p.decidedAt = a, chosen.X, time.Now()
+	p.decision, p.pendingX, p.pendingEsc, p.decidedAt = a, chosen.X, escDir, time.Now()
 	p.fire = fire.Noul >= fireThreshold && o.State.Laser == laserReady
 	p.fireAt = o.fire
 	p.mu.Unlock()

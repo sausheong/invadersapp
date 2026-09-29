@@ -28,26 +28,36 @@ func TestJevScenarios(t *testing.T) {
 		wantSpot  func(s spot) bool
 		fire      bool
 		checkFire bool
+		escape    string // expected escape direction, if checked
 	}{
 		{"bomb about to land on you", func(v *game.View) {
 			v.Bombs = []image.Rectangle{bombAt(v.Cannon.Min.X+4, game.CannonY-80)}
-		}, func(s spot) bool { return s.Safety == safe }, false, false},
+		}, func(s spot) bool { return s.Safety == safe }, false, false, ""},
 		{"alien far to the left", func(v *game.View) {
 			v.Aliens = []game.Alien{alienAt(40, 100, 0)}
-		}, func(s spot) bool { return s.Safety == safe && s.Fire == hitAlien }, false, false},
+		}, func(s spot) bool { return s.Safety == safe && s.Fire == hitAlien }, false, false, ""},
 		{"aligned under an alien", func(v *game.View) {
 			v.Aliens = []game.Alien{alienAt(v.Cannon.Min.X-2, 100, 0)}
-		}, func(s spot) bool { return s.Key == stayKey }, true, true},
+		}, func(s spot) bool { return s.Key == stayKey }, true, true, ""},
 		{"bombs either side, alien overhead", func(v *game.View) {
 			x := v.Cannon.Min.X
 			v.Aliens = []game.Alien{alienAt(x-2, 100, 0)}
 			v.Bombs = []image.Rectangle{bombAt(x-30, game.CannonY-60), bombAt(x+40, game.CannonY-60)}
-		}, func(s spot) bool { return s.Safety == safe }, true, true},
+		}, func(s spot) bool { return s.Safety == safe }, true, true, ""},
 		{"under your own shield", func(v *game.View) {
 			x := v.Cannon.Min.X
 			v.Shields = []image.Rectangle{shieldAt(x-2, game.CannonY-40)}
 			v.Aliens = []game.Alien{alienAt(x-2, 100, 0)}
-		}, nil, false, true},
+		}, nil, false, true, ""},
+		{"escape with the left wall beside you", func(v *game.View) {
+			v.Cannon = image.Rect(0, game.CannonY, game.CannonSize.X, game.CannonY+game.CannonSize.Y)
+		}, nil, false, false, escapeRight},
+		{"escape with a bomb landing on your right", func(v *game.View) {
+			x := v.Cannon.Min.X
+			for i := 1; i <= escapeSteps; i++ {
+				v.Bombs = append(v.Bombs, bombAt(x+i*spotStep+4, game.CannonY-30))
+			}
+		}, nil, false, false, escapeLeft},
 	}
 	for _, tc := range cases {
 		v := view()
@@ -58,14 +68,17 @@ func TestJevScenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
-		pick, fr := ans["spot"], ans["fire"]
+		pick, fr, esc := ans["spot"], ans["fire"], ans["escape"]
 		var chosen spot
 		for _, s := range o.Spots {
 			if s.Key == pick.Choice {
 				chosen = s
 			}
 		}
-		t.Logf("%-34s -> %s conf=%.2f fire=%.2f (%dms)\n      %s", tc.name, chosen.Key, pick.Confidence, fr.Noul, time.Since(start).Milliseconds(), chosen.Text)
+		t.Logf("%-40s -> %s conf=%.2f fire=%.2f escape=%s (%dms)\n      %s", tc.name, chosen.Key, pick.Confidence, fr.Noul, esc.Choice, time.Since(start).Milliseconds(), chosen.Text)
+		if tc.escape != "" && esc.Choice != tc.escape {
+			t.Errorf("%s: escape = %s, want %s (%v)", tc.name, esc.Choice, tc.escape, o.Escape)
+		}
 		if tc.wantSpot != nil && !tc.wantSpot(chosen) {
 			t.Errorf("%s: picked %s: %s", tc.name, chosen.Key, chosen.Text)
 		}

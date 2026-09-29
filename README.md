@@ -82,8 +82,9 @@ How it works:
 
 - **Code predicts:** it simulates the falling bombs and the moving formation, allowing for Jev's response time.
 - **Code describes:** it describes about 20 spots the cannon could move to, in plain language: whether it's safe to get there, and whether an alien will be in the line of fire on arrival.
-- **Jev decides:** it picks a spot (a Choice question) and whether to fire (a Noul question).
+- **Jev decides:** it picks a spot (a Choice question), whether to fire (a Noul question), and an escape direction (another Choice).
 - **Code acts:** it steers the cannon to the chosen spot. It drops a fire decision if the line of fire changed after Jev saw it.
+- **Jev plans an escape:** each request also asks which way to run if a new bomb appears right overhead. If the cannon's course runs into a bomb before a fresh answer could arrive, code carries out that escape at once instead of waiting for the network.
 
 Every decision is scored:
 

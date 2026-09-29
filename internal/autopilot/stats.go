@@ -44,6 +44,7 @@ type action struct {
 	Chosen    spot       `json:"chosen"`     // the spot Jev picked
 	SafeSpots int        `json:"safe_spots"` // how many spots were described as safe
 	Move      string     `json:"move"`       // direction that spot meant
+	Escape    string     `json:"escape"`     // Jev's planned escape if a bomb appears overhead
 	MoveConf  float64    `json:"move_confidence"`
 	FireProb  float64    `json:"fire_probability"`
 	Fired     bool       `json:"fired"`
@@ -70,6 +71,15 @@ type stats struct {
 	Fired                 int
 	Stale                 int // fire decisions dropped: line of fire changed before firing
 	Blocked               int // fire decisions dropped: a shot was already in flight
+	Escapes               int // planned escapes carried out
+}
+
+// escapeUsed counts a planned escape carried out because a bomb threatened
+// the cannon before a fresh decision could arrive.
+func (s *stats) escapeUsed() {
+	s.mu.Lock()
+	s.Escapes++
+	s.mu.Unlock()
 }
 
 // fireStale counts a fire decision dropped because the cannon's line of
@@ -249,6 +259,7 @@ func (s *stats) summary() string {
 			}
 		}
 	}
+	fmt.Fprintf(&b, "  Planned escapes carried out: %d\n", s.Escapes)
 	hit, shots := s.hits()
 	fmt.Fprintf(&b, "  Shots: %d fired, %d/%d hit %s; %d fire decisions dropped as stale, %d while a shot was in flight\n", s.Fired, hit, shots, pct(hit, shots), s.Stale, s.Blocked)
 	for _, ev := range []game.Event{game.EvShotAlien, game.EvShotUFO, game.EvShotMissed, game.EvShotShield, game.EvShotCancelled} {

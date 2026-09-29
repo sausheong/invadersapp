@@ -184,3 +184,52 @@ func TestAutoStart(t *testing.T) {
 		t.Error("autopilot should start a game after startDelay ticks on the title screen")
 	}
 }
+
+func TestEscapeSpot(t *testing.T) {
+	v := view()
+	x := v.Cannon.Min.X
+	f := newForecast(v)
+	if ex, s := f.escapeSpot(x, -1); ex >= x || s != safe {
+		t.Errorf("open field, run left: x=%d safety=%v", ex, s)
+	}
+	if ex, _ := newForecast(v).escapeSpot(0, -1); ex != -1 {
+		t.Errorf("against the left wall: x=%d, want -1", ex)
+	}
+	// a bomb landing on the first spot left soon after the cannon would get
+	// there makes it risky, so the escape goes one spot further
+	v.Bombs = []image.Rectangle{bombAt(x-spotStep+4, game.CannonY-80)}
+	if ex, s := newForecast(v).escapeSpot(x, -1); s != safe || ex >= x-spotStep {
+		t.Errorf("bomb on the first spot: x=%d safety=%v, want a safe spot further left", ex, s)
+	}
+}
+
+func TestSteerUsesPlannedEscape(t *testing.T) {
+	p := New()
+	v := view()
+	x := v.Cannon.Min.X
+	now := time.Now()
+	p.decision, p.pendingX, p.pendingEsc, p.decidedAt = &action{}, x, 1, now
+	p.steer(v, game.Input{}, now) // decision says stay, escape right if needed
+
+	v.Bombs = []image.Rectangle{bombAt(x+4, game.CannonY-20)} // a new bomb, landing in 5 ticks
+	in := p.steer(v, game.Input{}, now)
+	if !in.Right || !p.escaping || p.stats.Escapes != 1 {
+		t.Errorf("should run right on the planned escape: in=%+v escaping=%v", in, p.escaping)
+	}
+	p.steer(v, game.Input{}, now)
+	if p.stats.Escapes != 1 {
+		t.Error("an escape under way shouldn't be counted again")
+	}
+}
+
+func TestObserveDescribesEscapes(t *testing.T) {
+	v := view()
+	v.Cannon = image.Rect(0, game.CannonY, game.CannonSize.X, game.CannonY+game.CannonSize.Y)
+	o := observe(v, -1, 0)
+	if !strings.Contains(o.Escape[escapeLeft], "wall") {
+		t.Errorf("left escape against the wall: %q", o.Escape[escapeLeft])
+	}
+	if !strings.Contains(o.Escape[escapeRight], "safe spot") {
+		t.Errorf("right escape in the open: %q", o.Escape[escapeRight])
+	}
+}

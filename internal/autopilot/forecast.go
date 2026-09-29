@@ -24,6 +24,10 @@ const (
 
 	stayKey = "stay"
 	keepKey = "keep"
+
+	escapeLeft  = "left"
+	escapeRight = "right"
+	escapeSteps = 4 // spots checked in the escape direction
 )
 
 var beamStartY = game.CannonY - game.BeamSize.Y
@@ -91,10 +95,11 @@ type pilotState struct {
 
 // observation is everything code worked out for one decision.
 type observation struct {
-	State pilotState
-	Spots []spot
-	fire  target // what a shot would hit when the decision takes effect
-	seq   uint64 // publish order, so late answers to old observations are ignored
+	State  pilotState
+	Spots  []spot
+	Escape map[string]string // how escaping each way looks, for the escape question
+	fire   target            // what a shot would hit when the decision takes effect
+	seq    uint64            // publish order, so late answers to old observations are ignored
 }
 
 // questions builds the two questions asked together for an observation.
@@ -118,6 +123,14 @@ func (o *observation) questions() map[string]typesafe.Question {
 				},
 			},
 			Criteria: options,
+		},
+		"escape": {
+			Type: "choice",
+			Instructions: map[string]string{
+				"role":     "You are playing Space Invaders as the laser cannon at the bottom of the screen. Aliens above drop bombs that fall straight down.",
+				"question": "Plan ahead: if a new bomb suddenly appears right above you, too close to wait for another decision, which way should you run?",
+			},
+			Criteria: o.Escape,
 		},
 		"fire": {
 			Type:         "noul",
@@ -165,7 +178,82 @@ func observe(v game.View, cur, lag int) observation {
 			add(fmt.Sprintf("spot_%02d", i+1), moveText(xl, x), x)
 		}
 	}
+	o.Escape = map[string]string{
+		escapeLeft:  "Run left. " + escapeText(f, x0, -1),
+		escapeRight: "Run right. " + escapeText(f, x0, 1),
+	}
 	return o
+}
+
+// escapeText describes the nearest spot the cannon could dash to right now
+// in direction dir (-1 left, +1 right).
+func escapeText(f *forecast, x0, dir int) string {
+	side := "right"
+	if dir < 0 {
+		side = "left"
+	}
+	x, s := f.escapeSpot(x0, dir)
+	switch {
+	case x < 0:
+		return "The " + side + " wall is right beside you, so there is no room to run this way."
+	case s == safe:
+		return fmt.Sprintf("The nearest safe spot is %s to the %s, and no known bomb is falling there.", distanceText(abs(x-x0)), side)
+	case s == risky:
+		return fmt.Sprintf("The nearest spot is %s to the %s, but a known bomb will land there soon.", distanceText(abs(x-x0)), side)
+	}
+	return "Every spot this way is in the path of a known falling bomb."
+}
+
+func distanceText(d int) string {
+	switch {
+	case d <= 40:
+		return "a short dash"
+	case d <= 80:
+		return "a medium dash"
+	}
+	return "a long dash"
+}
+
+// escapeSpot finds where a dash in direction dir, starting now, should
+// stop: the nearest spot that is safe, else the nearest risky one. It
+// returns -1 if the wall leaves no room.
+func (f *forecast) escapeSpot(x0, dir int) (int, safety) {
+	maxX := game.Width - game.CannonSize.X
+	best, bestSafety := -1, doomed
+	for i := 1; i <= escapeSteps; i++ {
+		x := x0 + dir*i*spotStep
+		if x < 0 || x > maxX {
+			x = min(max(x, 0), maxX)
+			if abs(x-x0) < spotStep/2 {
+				break
+			}
+		}
+		s, _ := f.safety(x0, -1, 0, x)
+		if s < bestSafety {
+			best, bestSafety = x, s
+		}
+		if s == safe || x == 0 || x == maxX {
+			break
+		}
+	}
+	return best, bestSafety
+}
+
+// hitSoon reports whether the cannon, carrying on toward dest (-1 to stay
+// put), would be hit by a falling bomb within ticks.
+func (f *forecast) hitSoon(x0, dest, ticks int) bool {
+	w, h := game.CannonSize.X, game.CannonSize.Y
+	x := x0
+	for t := 1; t <= ticks; t++ {
+		x = stepToward(x, dest, 1)
+		c := image.Rect(x, game.CannonY, x+w, game.CannonY+h)
+		for _, b := range f.bombs {
+			if b.Add(image.Pt(0, game.BombSpeed*t)).Overlaps(c) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // moveText describes the move from x to dest in words.
