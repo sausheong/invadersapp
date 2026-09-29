@@ -96,10 +96,27 @@ This just builds the binary into `invaders.app/Contents/MacOS` — since assets 
 
 A prebuilt Apple Silicon bundle is attached to each [release](https://github.com/sausheong/invadersapp/releases). It is unsigned, so right-click it and choose **Open** the first time.
 
+## Jev autopilot (optional)
+
+The game can be played by [Jev](https://docs.typesafe.ai/introduction), TypeSafe's System One model. The autopilot is compiled in only with the `jev` build tag; a normal build contains none of it.
+
+```sh
+go build -tags jev -o invaders      # or: ./build-macOS -tags jev
+TYPESAFE_API_KEY=... ./invaders -jev
+```
+
+The key is read from `TYPESAFE_API_KEY`, a `.env` file in the current directory, or `~/Library/Application Support/invaders/typesafe-api-key` (on macOS). Press `j` during play to switch between Jev and manual control; with the autopilot on, it starts a new game by itself.
+
+How it works: code simulates the falling bombs and the moving formation, then describes about 20 candidate spots for the cannon in plain language (is it safe to get there, will an alien be in the line of fire on arrival). Jev picks a spot and decides whether to fire; code steers the cannon there. Every decision is scored — moves by whether the cannon survives the next second, shots by what they hit — shown in the bottom-right corner, logged to `jev-actions.jsonl` and summarised in `jev-summary.txt` (both next to the high score file).
+
+All autopilot code lives in the `jev_*.go` files; `nojev.go` provides the no-op hooks used without the tag.
+
 ## Tests
 
 ```sh
-go test ./...
+go test ./...                                  # game
+go test -tags jev ./...                        # game + autopilot
+go test -tags jev,live -run TestJev -v .       # autopilot scenarios against the live TypeSafe API
 ```
 
 ## Screenshots

@@ -67,6 +67,26 @@ type effect struct {
 	ticksLeft int
 }
 
+// gameEvent is an outcome reported through Game.onEvent.
+type gameEvent int
+
+const (
+	evCannonHit gameEvent = iota
+	evShotFired
+	evShotAlien
+	evShotUFO
+	evShotMissed
+	evShotShield
+	evShotCancelled
+)
+
+// emit reports an outcome to onEvent, if anyone is listening.
+func (g *Game) emit(ev gameEvent) {
+	if g.onEvent != nil {
+		g.onEvent(ev, g.beamFromPilot)
+	}
+}
+
 // Game holds all gameplay state. step() advances it one tick from raw input
 // (pure logic, no drawing); render() paints the current state into an image
 // (no logic). Keeping the two separate is what makes step() unit-testable
@@ -84,9 +104,14 @@ type Game struct {
 	ufoDir    int
 	ufoTicks  int // ticks remaining before the ufo may next appear
 
-	cannon     Sprite
-	beam       Sprite
-	beamActive bool
+	cannon        Sprite
+	beam          Sprite
+	beamActive    bool
+	beamFromPilot bool // the beam in flight was fired by the autopilot
+
+	// onEvent, if set, is told about outcomes the autopilot stats track:
+	// cannon hits and how each shot ended. Nil in tests.
+	onEvent func(ev gameEvent, fromPilot bool)
 
 	cannonExploding bool
 	explodeTicks    int
@@ -311,6 +336,8 @@ func (g *Game) handleFire(in Input) {
 	}
 	g.beam.Position = image.Pt(g.cannon.Position.X+7, g.cannon.Position.Y-beamSprite.Dy())
 	g.beamActive = true
+	g.beamFromPilot = in.PilotFire
+	g.emit(evShotFired)
 	playSound("shoot")
 }
 
@@ -321,6 +348,7 @@ func (g *Game) moveBeam() {
 	g.beam.Position.Y -= beamSpeed
 	if g.beam.Position.Y+beamSprite.Dy() < 0 {
 		g.beamActive = false
+		g.emit(evShotMissed)
 		return
 	}
 	for _, s := range g.shields {
@@ -330,6 +358,7 @@ func (g *Game) moveBeam() {
 		if p, ok := shieldImpactPoint(g.beam.rect(), s); ok {
 			s.damage(p, 2)
 			g.beamActive = false
+			g.emit(evShotShield)
 			return
 		}
 	}
@@ -442,8 +471,8 @@ func (g *Game) moveBombs() {
 		}
 
 		if collide(b, g.cannon) {
-			g.hitCannon()
-			continue
+			g.hitCannon() // clears every bomb, so stop here
+			return
 		}
 		kept = append(kept, b)
 	}
@@ -454,6 +483,10 @@ func (g *Game) moveBombs() {
 // are cleared, and (after explodeTicks) either a respawn or game over
 // follows in stepPlaying.
 func (g *Game) hitCannon() {
+	if g.beamActive {
+		g.emit(evShotCancelled)
+	}
+	g.emit(evCannonHit)
 	g.cannonExploding = true
 	g.explodeTicks = cannonExplosionTicks
 	g.lives--
@@ -512,6 +545,7 @@ func (g *Game) checkBeamHits() {
 		if collide(g.beam, g.aliens[i]) {
 			g.killAlien(i)
 			g.beamActive = false
+			g.emit(evShotAlien)
 			return
 		}
 	}
@@ -520,6 +554,7 @@ func (g *Game) checkBeamHits() {
 		g.spawnEffect(g.ufo.Position)
 		g.ufoActive = false
 		g.beamActive = false
+		g.emit(evShotUFO)
 		playSound("invaderkilled")
 	}
 }
@@ -708,12 +743,14 @@ func runGameLoop(g *Game) {
 	g.highScore = loadHighScore()
 	g.savedHighScore = g.highScore
 	g.persistHighScore = saveHighScore
+	pilotAttach(g)
 
 	ticker := time.NewTicker(time.Second / 50)
 	defer ticker.Stop()
 	for range ticker.C {
 		in := input.snapshot()
-		g.step(in)
+		g.step(pilotInput(g, in))
+		pilotAfterStep(g)
 
 		dst := image.NewRGBA(image.Rect(0, 0, gameWidth, gameHeight))
 		g.render(dst)

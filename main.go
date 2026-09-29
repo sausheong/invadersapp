@@ -1,6 +1,11 @@
 package main
 
 import (
+	"flag"
+	"os"
+	"os/signal"
+	"syscall"
+
 	webview "github.com/webview/webview_go"
 )
 
@@ -12,6 +17,9 @@ const windowScale = 2
 // game. There is no web server: the page pulls rendered frames and pushes
 // key events through webview_go's Bind, calling straight into Go.
 func main() {
+	flag.Parse()
+	pilotStart()
+
 	loadSounds()
 
 	w := webview.New(false)
@@ -37,8 +45,18 @@ func main() {
 	// thread-safe way of closing the window from any goroutine.
 	quitFunc = func() { w.Dispatch(w.Terminate) }
 
+	// Ctrl+C or kill closes the window normally, so pilotStop below still runs.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sig
+		quitFunc()
+	}()
+
 	startGame()
 
 	w.SetHtml(gameHTML())
 	w.Run()
+
+	pilotStop()
 }

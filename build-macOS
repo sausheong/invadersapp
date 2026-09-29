@@ -1,1 +1,1 @@
-go build -o invaders.app/Contents/MacOS/invaders
+go build "$@" -o invaders.app/Contents/MacOS/invaders

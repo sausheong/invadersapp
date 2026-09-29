@@ -11,6 +11,8 @@ type Input struct {
 	Pause       bool
 	Start       bool
 	Quit        bool
+	Pilot       bool // toggle the autopilot (only in builds with -tags jev)
+	PilotFire   bool // Fire was requested by the autopilot
 }
 
 // inputState holds the raw key state shared between the UI thread (webview
@@ -24,6 +26,7 @@ type inputState struct {
 	pauseEvent          bool
 	startEvent          bool
 	quitEvent           bool
+	pilotEvent          bool
 }
 
 var input inputState
@@ -36,6 +39,7 @@ const (
 	keyS     = 83
 	keyQ     = 81
 	keyP     = 80
+	keyJ     = 74
 )
 
 // keyDown handles a key press bound from the webview UI thread. Fast and
@@ -56,6 +60,8 @@ func keyDown(code int) {
 		input.startEvent = true
 	case keyQ:
 		input.quitEvent = true
+	case keyJ:
+		input.pilotEvent = true
 	}
 }
 
@@ -84,10 +90,12 @@ func (in *inputState) snapshot() Input {
 		Pause: in.pauseEvent,
 		Start: in.startEvent,
 		Quit:  in.quitEvent,
+		Pilot: in.pilotEvent,
 	}
 	in.fireEvent = false
 	in.pauseEvent = false
 	in.startEvent = false
 	in.quitEvent = false
+	in.pilotEvent = false
 	return snap
 }

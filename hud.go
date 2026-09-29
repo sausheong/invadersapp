@@ -34,6 +34,8 @@ func (g *Game) drawHUD(dst *image.RGBA) {
 	hs := fmt.Sprintf("HIGH %d", g.highScore)
 	printLine(dst, gameWidth/2-len(hs)*4, 12, hs, hudWhite)
 
+	pilotHUD(dst)
+
 	// Remaining lives as small cannon-sprite icons rather than a placeholder
 	// letter glyph, echoing the original arcade's row of ship icons.
 	if g.sprites != nil {
