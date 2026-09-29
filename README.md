@@ -1,72 +1,42 @@
 # Space Invaders
 
-A small cross-platform desktop Space Invaders game written in Go. The game renders every frame on the Go side and shows it in a native webview window — no game engine, no GUI toolkit, and (as of v0.3.0) no web server either: the window talks straight to Go through [webview_go](https://github.com/webview/webview_go)'s `Bind`.
+A small cross-platform desktop Space Invaders game written in Go. Every frame is drawn in Go and shown in a native webview window, which calls straight into Go through [webview_go](https://github.com/webview/webview_go)'s `Bind`. There's no game engine, GUI toolkit or web server.
 
 ![Space Invaders](images/space-invaders.jpg)
 
-The story behind the app, and a walkthrough of how it was built, is in the original article: [Create a simple cross-platform desktop game with Go](https://medium.com/sausheong/create-a-simple-cross-platform-desktop-game-with-go-8e5432128c9b).
+The story behind the app is in the original article, [Create a simple cross-platform desktop game with Go](https://medium.com/sausheong/create-a-simple-cross-platform-desktop-game-with-go-8e5432128c9b). The game has changed a lot since then.
 
-![Space Invaders on a Mac](images/mac-invaders.gif)
+![Playing Space Invaders](images/screen-play.png)
 
 ## How to play
 
 | Key | Action |
 |---|---|
-| `s` | Start the game, and restart after game over |
-| `←` / `→` | Move the laser cannon (hold to keep moving) |
+| `s` | Start, or play again after game over |
+| `←` / `→` | Move the cannon (hold to keep moving) |
 | `Space` | Fire |
 | `p` | Pause / resume |
-| `q` | Quit to the title screen while playing; quit the app from the title screen |
+| `q` | During play, back to the title screen; on the title or game over screen, quit |
+| `j` | Switch the Jev autopilot on or off (only in builds with `-tags jev`, see below) |
 
-Aliens in the top row are worth 30 points, the middle row 20 and the bottom row 10. You have multiple lives per game, and the aliens come in waves — clear one and a faster, tougher wave marches in behind it. Destructible shields give you cover from alien bombs, and a bonus UFO occasionally crosses the top of the screen for extra points. The game keeps a running high score across plays. It's over for good when you lose your last life.
-
-## How it works
-
-The whole game is one Go binary with **no web server and no browser involved** — just a native OS webview window bound directly to Go functions:
-
-1. **The game loop** (`invaders.go` and friends), running in its own goroutine, owns all game state. Each tick it moves sprites, checks collisions, draws everything onto an image with [gift](https://github.com/disintegration/gift), and encodes it as a PNG data URI, tagged with an incrementing sequence number.
-2. **A native webview window** (`main.go`, via [webview_go](https://github.com/webview/webview_go)) hosts a tiny embedded HTML page (`public/html/game.html`) and binds three Go functions straight into its JavaScript global scope with `w.Bind`:
-   * `frame(lastSeq)` — the page calls this in a `requestAnimationFrame` loop; Go returns the current sequence number and, only when it has changed, the new frame as a data URI
-   * `keyDown(code)` / `keyUp(code)` — the page's `keydown`/`keyup` listeners call these directly with the JS key code
-   Each bound call crosses into Go and back as a JSON-marshalled Promise; there's no HTTP, no polling endpoint, and no port to manage.
-3. **Assets are embedded** (`assets.go`, via `//go:embed public`) — the sprite sheet, backgrounds, sounds and the HTML page all live inside the compiled binary, decoded on demand. That means `go run .` works from a source checkout, and a distributed binary or app bundle needs no `public/` folder alongside it.
-
-Sound effects are played with [beep](https://github.com/gopxl/beep) (`sound.go`), reading their `.wav` data out of the same embedded filesystem. The sounds are decoded into memory once at startup.
-
-```
-.
-├── main.go              webview window, Bind wiring, quit handling
-├── assets.go            //go:embed public + asset accessors (images, HTML, sounds)
-├── sound.go             sound loading and playback
-├── invaders.go          Sprite type, collide, createAlien
-├── game.go              Game state, startNewGame/startNextWave, step() and the game loop
-├── frame.go             frame encoding (createFrame) and publishing (currentFrame)
-├── input.go             keyDown/keyUp and the thread-safe input snapshot
-├── render.go            render(): draws the current Game state to an image
-├── hud.go               printLine (bitmap text) and drawHUD (score/lives)
-├── shield.go            destructible bunker bitmap logic
-├── highscore.go         high score load/save (JSON in the user config dir)
-├── invaders_test.go     unit tests for Sprite/collide
-├── game_test.go         unit tests for game state and step()
-├── render_test.go       snapshot rendering tests (INVADERS_SNAPSHOT_DIR)
-├── shield_test.go       unit tests for shields
-├── highscore_test.go    unit tests for high score persistence
-├── public/              game HTML page, sprite sheet, backgrounds, sounds
-├── invaders.app/        macOS app bundle
-└── build-macOS          builds the macOS app bundle
-```
-
-## Requirements
-
-* Go 1.26 or later. The module pins `toolchain go1.26.8`, which Go downloads automatically if needed.
-* cgo (`CGO_ENABLED=1`) and a C/C++ compiler, since webview wraps the operating system's own web view:
-  * **macOS** — Xcode Command Line Tools (`xcode-select --install`).
-  * **Linux** — GTK 3 and WebKitGTK development packages, e.g. `sudo apt install libgtk-3-dev libwebkit2gtk-4.0-dev` on Debian/Ubuntu.
-  * **Windows** — the [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) runtime (preinstalled on Windows 10/11) and a compiler such as MinGW-w64.
+- **Scoring:** aliens are worth 30, 20 and 10 points from the top row down. The mystery UFO that crosses the top is worth 50 to 300.
+- **Lives:** you have 3 lives. The game ends when you lose the last one, or when the aliens reach your row.
+- **Speed:** the aliens speed up as their numbers drop. Clear a wave and the next starts lower and faster.
+- **Shields:** four shields absorb bombs and shots, and wear away as they're hit.
+- **Bombs:** only the lowest alien in each column can drop one.
+- **High score:** saved between sessions.
 
 ## Build and run
 
-All assets are embedded in the binary, so there's nothing to copy alongside it — `go run .` works straight from a checkout:
+Requirements:
+
+- Go 1.26 or later. The module pins `toolchain go1.26.8`, which Go downloads if needed.
+- cgo and a C/C++ compiler, because webview wraps the operating system's own web view:
+  - **macOS:** Xcode Command Line Tools (`xcode-select --install`).
+  - **Linux:** GTK 3 and WebKitGTK development packages, e.g. `sudo apt install libgtk-3-dev libwebkit2gtk-4.0-dev`.
+  - **Windows:** the [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) runtime (preinstalled on Windows 10/11) and a compiler such as MinGW-w64.
+
+All assets are embedded in the binary, so it runs straight from a checkout:
 
 ```sh
 go run .
@@ -75,62 +45,86 @@ go run .
 To build a standalone binary:
 
 ```sh
-go build -o invaders
-./invaders
+go build -o invaders                               # macOS / Linux
+go build -ldflags="-H windowsgui" -o invaders.exe  # Windows, without a console window
 ```
 
-On Windows, hide the console window with:
-
-```sh
-go build -ldflags="-H windowsgui" -o invaders.exe
-```
-
-### macOS app bundle
+To build the macOS app bundle:
 
 ```sh
 ./build-macOS
 open invaders.app
 ```
 
-This just builds the binary into `invaders.app/Contents/MacOS` — since assets are embedded, the bundle needs nothing else alongside it.
+`build-macOS` passes any arguments to `go build`, e.g. `./build-macOS -tags jev`.
 
-A prebuilt Apple Silicon bundle is attached to each [release](https://github.com/sausheong/invadersapp/releases). It is unsigned, so right-click it and choose **Open** the first time.
+Each [release](https://github.com/sausheong/invadersapp/releases) includes a prebuilt Apple Silicon app. It's unsigned, so right-click it and choose **Open** the first time.
 
 ## Jev autopilot (optional)
 
-The game can be played by [Jev](https://docs.typesafe.ai/introduction), TypeSafe's System One model. The autopilot is compiled in only with the `jev` build tag; a normal build contains none of it.
+[Jev](https://docs.typesafe.ai/introduction), TypeSafe's System One model, can play the game. The autopilot is compiled in only with the `jev` build tag; a normal build contains none of it.
 
 ```sh
-go build -tags jev -o invaders      # or: ./build-macOS -tags jev
-TYPESAFE_API_KEY=... ./invaders -jev
+go build -tags jev -o invaders
+TYPESAFE_API_KEY=... ./invaders -jev    # or press j during play
 ```
 
-The key is read from `TYPESAFE_API_KEY`, a `.env` file in the current directory, or `~/Library/Application Support/invaders/typesafe-api-key` (on macOS). Press `j` during play to switch between Jev and manual control; with the autopilot on, it starts a new game by itself.
+- **API key:** read from `TYPESAFE_API_KEY`, then a `.env` file in the current directory, then a `typesafe-api-key` file next to the high score file.
+- **Unattended play:** with the autopilot on, it starts a new game by itself.
 
-How it works: code simulates the falling bombs and the moving formation, then describes about 20 candidate spots for the cannon in plain language (is it safe to get there, will an alien be in the line of fire on arrival). Jev picks a spot and decides whether to fire; code steers the cannon there. Every decision is scored — moves by whether the cannon survives the next second, shots by what they hit — shown in the bottom-right corner, logged to `jev-actions.jsonl` and summarised in `jev-summary.txt` (both next to the high score file).
+How it works:
 
-All autopilot code lives in the `jev_*.go` files; `nojev.go` provides the no-op hooks used without the tag.
+- **Code predicts:** it simulates the falling bombs and the moving formation, allowing for Jev's response time.
+- **Code describes:** it describes about 20 spots the cannon could move to, in plain language: whether it's safe to get there, and whether an alien will be in the line of fire on arrival.
+- **Jev decides:** it picks a spot (a Choice question) and whether to fire (a Noul question).
+- **Code acts:** it steers the cannon to the chosen spot. It drops a fire decision if the line of fire changed after Jev saw it.
+
+Every decision is scored:
+
+- **Moves** by whether the cannon survives the next second.
+- **Shots** by what they hit.
+
+The running score is shown in the bottom-right corner. Every decision is logged to `jev-actions.jsonl`, and `jev-summary.txt` keeps a summary up to date. Both are next to the high score file.
+
+## How it works
+
+- **Game loop** (`game.go`): a single goroutine owns the game state. Fifty times a second it reads input, steps the simulation, draws the frame with [gift](https://github.com/disintegration/gift), and publishes it as a PNG data URI with a sequence number.
+- **Window** (`main.go`): hosts a small embedded page (`public/html/game.html`) and binds three Go functions into it:
+  - `frame(lastSeq)` returns a new frame only when one is available.
+  - `keyDown(code)` and `keyUp(code)` pass keyboard input straight to Go.
+- **Assets** (`assets.go`): the sprites, backgrounds, sounds and page are embedded with `//go:embed`.
+- **Sound** (`sound.go`): uses [beep](https://github.com/gopxl/beep); the sounds are decoded once at startup.
+
+```
+main.go         window, Bind wiring, quit handling
+game.go         game state, rules and the game loop
+invaders.go     sprites and collision
+render.go       drawing a frame; hud.go draws the score and lives
+shield.go       destructible shields
+input.go        keyboard input shared with the game loop
+frame.go        frame encoding and publishing
+assets.go       embedded assets; sound.go plays them
+highscore.go    high score persistence
+jev_*.go        Jev autopilot (built with -tags jev); nojev.go is its no-op stand-in
+public/         page, sprite sheet, backgrounds, sounds
+invaders.app/   macOS app bundle
+```
 
 ## Tests
 
 ```sh
-go test ./...                                  # game
-go test -tags jev ./...                        # game + autopilot
-go test -tags jev,live -run TestJev -v .       # autopilot scenarios against the live TypeSafe API
+go test ./...                               # game
+go test -tags jev ./...                     # game and autopilot
+go test -tags jev,live -run TestJev -v .    # autopilot against the live TypeSafe API
+INVADERS_SNAPSHOT_DIR=/tmp/snap go test -run TestRenderSnapshots .   # render screenshots
 ```
 
 ## Screenshots
 
-The start screen on Windows:
-
-![Space Invaders on Windows](images/win-invaders.png)
-
-Playing on Windows:
-
-![Space Invaders game on Windows](images/win-invaders.gif)
+![Title screen](images/screen-title.png) ![Game over](images/screen-gameover.png)
 
 ## Credits
 
-* Sound effects from [Classics United](http://www.classicgaming.cc/classics/space-invaders/sounds).
-* Thanks to Ibrahim Wu, who helped debug the app on Windows and found the MSHTML frame caching problem.
-* Thanks to Serge Zaitsev for the original [webview](https://github.com/zserge/webview) package, and to the maintainers of [webview_go](https://github.com/webview/webview_go) and [gopxl/beep](https://github.com/gopxl/beep).
+- Sound effects from [Classics United](http://www.classicgaming.cc/classics/space-invaders/sounds).
+- Thanks to Ibrahim Wu, who helped debug the original app on Windows.
+- Thanks to Serge Zaitsev for the original [webview](https://github.com/zserge/webview) package, and to the maintainers of [webview_go](https://github.com/webview/webview_go) and [gopxl/beep](https://github.com/gopxl/beep).
