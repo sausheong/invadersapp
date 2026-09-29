@@ -3,25 +3,24 @@
     <head>
         <style>
         body {
-            background-image: url("/public/images/background.jpg");
-            background-repeat: no-repeat;           
+            background-image: url("/public/images/bg.png");
+            background-repeat: no-repeat;
             margin: 0;
-        }        
+        }
         </style>
-        <script src="/public/js/jquery-3.3.1.min.js"></script>
         <script type="text/javascript">
-            setInterval(function() {
-                $.get('/frame', function(data) {
-                    $('#image').attr('src', data);
+            setInterval(function () {
+                fetch('/frame').then(function (r) { return r.text(); }).then(function (data) {
+                    document.getElementById('image').src = data;
                 });
             }, {{ . }});
 
-            $("body,html").keydown(function( event ) {
-                if ( event.which == 13 ) {
+            document.addEventListener('keydown', function (event) {
+                if ( event.keyCode == 13 ) {
                     event.preventDefault();
                 }
-                $.get('/key?event='+event.which);
-            });               
+                fetch('/key?event=' + event.keyCode);
+            });
         </script>
     </head>
     <body>

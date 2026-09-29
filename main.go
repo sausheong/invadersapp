@@ -9,26 +9,23 @@ import (
 	"image/color"
 	"image/png"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
+	"sync/atomic"
 
-	"github.com/zserge/webview"
-
-	"github.com/faiface/beep/speaker"
-	"github.com/faiface/beep/wav"
+	webview "github.com/webview/webview_go"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/inconsolata"
 	"golang.org/x/image/math/fixed"
-	"net"
 )
 
-var frame string                         // game frames
+var frame atomic.Value                   // game frames
 var dir string                           // current directory
 var events chan string                   // keyboard events
-var gameOver = false                     // end of game
+var gameOver atomic.Bool                 // end of game
 var windowWidth, windowHeight = 400, 300 // width and height of the window
 var frameRate int                        // how many frames to show per second (fps)
 var gameDelay int                        // delay time added to each game loop
@@ -42,25 +39,35 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	frameRate = 50                                         // 50 fps
-	gameDelay = 20                                         // 20 ms delay
+	frameRate = 50 // 50 fps
+	gameDelay = 20 // 20 ms delay
+	frame.Store("")
+}
+
+// loadAssets loads the images and sounds needed to run the game. It's kept
+// out of init() so that importing this package (e.g. in tests) doesn't try
+// to read files relative to a test binary's location.
+func loadAssets() {
 	sprites = getImage(dir + "/public/images/sprites.png") // spritesheet
 	background = getImage(dir + "/public/images/bg.png")   // background image
+	loadSounds()
 }
 
 // main function
 func main() {
+	loadAssets()
 	// channel to get the web prefix
 	prefixChannel := make(chan string)
 	// run the web server in a separate goroutine
 	go app(prefixChannel)
-	prefix := <- prefixChannel
+	prefix := <-prefixChannel
 	// create a web view
-	err := webview.Open("Space Invaders", prefix + "/public/html/index.html",
-		windowWidth, windowHeight, false)
-	if err != nil {
-		log.Fatal(err)
-	}
+	w := webview.New(false)
+	defer w.Destroy()
+	w.SetTitle("Space Invaders")
+	w.SetSize(windowWidth, windowHeight, webview.HintFixed)
+	w.Navigate(prefix + "/public/html/index.html")
+	w.Run()
 }
 
 // web app
@@ -78,12 +85,13 @@ func app(prefixChannel chan string) {
 	}
 	portAddress := listener.Addr().String()
 	prefixChannel <- "http://" + portAddress
-	listener.Close()
 	server := &http.Server{
-		Addr:    portAddress,
 		Handler: mux,
 	}
-	server.ListenAndServe()
+	// reuse the listener we already opened instead of closing it and letting
+	// ListenAndServe open a brand-new one on the same address (racy and
+	// pointless).
+	server.Serve(listener)
 }
 
 // start the game
@@ -98,9 +106,9 @@ func start(w http.ResponseWriter, r *http.Request) {
 func captureKeys(w http.ResponseWriter, r *http.Request) {
 	ev := r.FormValue("event")
 	// what to react to when the game is over
-	if gameOver {
+	if gameOver.Load() {
 		if ev == "83" { // s
-			gameOver = false
+			gameOver.Store(false)
 			go generateFrames()
 		}
 		if ev == "81" { // q
@@ -115,7 +123,7 @@ func captureKeys(w http.ResponseWriter, r *http.Request) {
 
 // get the game frames
 func getFrame(w http.ResponseWriter, r *http.Request) {
-	str := "data:image/png;base64," + frame
+	str := "data:image/png;base64," + frame.Load().(string)
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Write([]byte(str))
 }
@@ -136,24 +144,17 @@ func printLine(img *image.RGBA, x, y int, label string, col color.RGBA) {
 func createFrame(img image.Image) {
 	var buf bytes.Buffer
 	png.Encode(&buf, img)
-	frame = base64.StdEncoding.EncodeToString(buf.Bytes())
-}
-
-// play a sound
-func playSound(name string) {
-	f, _ := os.Open(dir + "/public/sounds/" + name + ".wav")
-	s, format, _ := wav.Decode(f)
-	speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/20))
-	speaker.Play(s)
+	frame.Store(base64.StdEncoding.EncodeToString(buf.Bytes()))
 }
 
 // get an image from the file
 func getImage(filePath string) image.Image {
 	imgFile, err := os.Open(filePath)
-	defer imgFile.Close()
 	if err != nil {
 		fmt.Println("Cannot read file:", err)
+		return nil
 	}
+	defer imgFile.Close()
 	img, _, err := image.Decode(imgFile)
 	if err != nil {
 		fmt.Println("Cannot decode file:", err)

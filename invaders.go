@@ -75,7 +75,6 @@ func createAlien(x, y int, sprite, alt image.Rectangle, points int) (s Sprite) {
 
 // generate frames for the game
 func generateFrames() {
-	rand.Seed(time.Now().UTC().UnixNano())
 	var aliens = []Sprite{}
 	var bombs = []Sprite{}
 	// game variables
@@ -97,7 +96,7 @@ func generateFrames() {
 	}
 
 	// main game loop
-	for !gameOver {
+	for !gameOver.Load() {
 		// to slow up or speed up the game
 		time.Sleep(time.Millisecond * time.Duration(gameDelay))
 		// if any of the keyboard events are captured
@@ -105,7 +104,7 @@ func generateFrames() {
 		case ev := <-events:
 			// exit the game
 			if ev == "81" { // q
-				gameOver = true
+				gameOver.Store(true)
 			}
 			if ev == "32" { // space bar
 				if beam.Status == false {
@@ -160,12 +159,12 @@ func generateFrames() {
 			bombs[i].Position.Y = bombs[i].Position.Y + bombSpeed
 			bombs[i].Filter.DrawAt(dst, sprites, image.Pt(bombs[i].Position.X, bombs[i].Position.Y), gift.OverOperator)
 			if collide(bombs[i], laserCannon) {
-				gameOver = true
+				gameOver.Store(true)
 				laserCannon.FilterE.DrawAt(dst, sprites, image.Pt(laserCannon.Position.X, laserCannon.Position.Y), gift.OverOperator)
 			}
 		}
 		// draw the laser cannon unless it's been destroyed
-		if !gameOver {
+		if !gameOver.Load() {
 			laserCannon.Filter.DrawAt(dst, sprites, image.Pt(laserCannon.Position.X, laserCannon.Position.Y), gift.OverOperator)
 		}
 
@@ -197,11 +196,11 @@ func generateFrames() {
 
 		// if the aliens reach the position of the cannon, it's game over!
 		if aliens[0].Position.Y > 180 {
-			gameOver = true
+			gameOver.Store(true)
 		}
 		createFrame(dst)
 		// pause a bit before ending the game
-		if gameOver {
+		if gameOver.Load() {
 			playSound("explosion")
 			time.Sleep(time.Second)
 		}

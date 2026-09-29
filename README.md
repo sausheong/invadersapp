@@ -8,7 +8,7 @@ Now, if you know much about Go at all you would know that there simply isn't any
 
 However, Electron is pretty heavy, uses quite a bit of Javascript and has tonnes of documentation to wade through. I was  looking for something Go-oriented and simple to just kickstart. More importantly I simply wanted to use what I already created earlier, which is nothing much more than simply displaying a series of images rapidly such that it looks properly animated.
 
-Then I stumbled on this little Go library called [webview](https://github.com/zserge/webview). Webview is tiny and simple library that wraps around webview (MacOS), MSHTML (Windows) and gtk-webkit2 (Linux). Its documentation for the Go part is just a page or so!
+Then I stumbled on this little Go library called [webview](https://github.com/webview/webview_go) (the maintained continuation of the original, now-archived `zserge/webview`). Webview is tiny and simple library that wraps around webview (MacOS), MSHTML/WebView2 (Windows) and gtk-webkit2 (Linux). Its documentation for the Go part is just a page or so!
 
 Let's take stock at what we need to do:
 
@@ -243,19 +243,48 @@ See how I play the sound after each time I detect the string `32` (captured from
 
 ## Play some sound
 
-Games work better with game sounds and effects. I got the Space Invaders special effect sounds from [Classics United](http://www.classicgaming.cc/classics/space-invaders/sounds) website and also used the [Beep](https://github.com/faiface/beep) package to play them.
+Games work better with game sounds and effects. I got the Space Invaders special effect sounds from [Classics United](http://www.classicgaming.cc/classics/space-invaders/sounds) website and also used the [Beep](https://github.com/gopxl/beep) package (the maintained fork of the original, archived `faiface/beep`) to play them.
 
 ```go
+// initSpeaker initializes the speaker exactly once for the whole process.
+func initSpeaker() error {
+	speakerOnce.Do(func() {
+		speakerErr = speaker.Init(speakerSampleRate, speakerSampleRate.N(time.Second/20))
+	})
+	return speakerErr
+}
+
+// preloadSound decodes a WAV file once and stores it in a beep.Buffer so
+// every later play is just a cheap buffer read.
+func preloadSound(name string) error {
+	f, err := os.Open(dir + "/public/sounds/" + name + ".wav")
+	if err != nil {
+		return err
+	}
+	streamer, format, err := wav.Decode(f)
+	if err != nil {
+		f.Close()
+		return err
+	}
+	defer streamer.Close() // closes f for us
+
+	buf := beep.NewBuffer(format)
+	buf.Append(streamer)
+	soundBuffers[name] = buf
+	return nil
+}
+
 // play a sound
 func playSound(name string) {
-	f, _ := os.Open(dir + "/public/sounds/" + name + ".wav")
-	s, format, _ := wav.Decode(f)
-	speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/20))
-	speaker.Play(s)
+	buf, ok := soundBuffers[name]
+	if !ok {
+		return
+	}
+	speaker.Play(buf.Streamer(0, buf.Len()))
 }
 ```
 
-Playing the sound effect is simply getting the WAV file, decode it and play it back. Unfortunately the package closes the file after decoding it so I have to reopen the file every time, but it works well enough.
+Decoding a WAV file closes the underlying file handle, and re-initializing the speaker on every play caused glitches, so instead every sound is decoded once up front (in `loadSounds`, called at startup) into an in-memory `beep.Buffer`. Playing a sound is then just streaming from that buffer — no file I/O, no repeated `speaker.Init`. See [`sound.go`](sound.go) for the full implementation, including sample-rate resampling and graceful fallback when no audio device is available.
 
 ## Show game scores at the end game
 
@@ -293,14 +322,37 @@ printLine(endScreen, 137, 260, "Press 'q' to quit", color.RGBA{255, 0, 0, 255})
 createFrame(endScreen)
 ```
 
+# What's new in v0.2.0
+
+* Upgraded to Go 1.26 and converted the project to a Go module (`go.mod`/`go.sum`).
+* Replaced the archived `zserge/webview` with [`webview/webview_go`](https://github.com/webview/webview_go).
+* Replaced the archived `faiface/beep` with [`gopxl/beep/v2`](https://github.com/gopxl/beep). The speaker is now initialized once and sounds are preloaded into memory instead of being reopened and decoded on every play.
+* Removed jQuery and the unused Bootstrap files; the front end is now plain JavaScript (`fetch` and `keydown` listeners).
+* Fixed data races on the shared game frame and game-over state, a race in the web server startup, and a missing background image reference.
+* Added unit tests (`go test ./...`).
+
 # Building the app
 
-First, you'll need to install the dependencies, if you don't already have them:
+## Requirements
+
+* Go 1.26 or later (the module pins `toolchain go1.26.8`, which `go build`/`go test` will fetch automatically if needed)
+* `CGO_ENABLED=1` and a working C toolchain, since `webview_go` wraps the native OS webview via cgo:
+  * **macOS** — Xcode Command Line Tools (`xcode-select --install`). Links against `WebKit.framework` automatically.
+  * **Linux** — the `webkit2gtk-4.1` development package (e.g. `libwebkit2gtk-4.1-dev` on Debian/Ubuntu) plus a C compiler.
+  * **Windows** — the [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) runtime (preinstalled on modern Windows 10/11) and a C compiler such as MinGW-w64.
+
+The project is a Go module, so dependencies are fetched automatically:
+
+```sh
+go mod download
+```
+
+If you're adding it fresh to your own module, the dependencies are:
 
 ```sh
 go get github.com/disintegration/gift
-go get github.com/faiface/beep/speaker
-go get github.com/faiface/beep/wav
+go get github.com/gopxl/beep/v2
+go get github.com/webview/webview_go
 ```
 
 To build the app on Mac, just use the `build-macOS` script. It should build the app and then place it accordingly into the `invaders.app` application package. With that you can just double-click on the app and start playing!
@@ -338,4 +390,4 @@ Have fun!
 # Thank yous
 
 * A shout-out to Ibrahim Wu, who helped me to debug the app on Windows and also discovered the problem with MSHTML caching.
-* Thanks to Serge Zaitsev for his amazing [webview](https://github.com/zserge/webview) package!
+* Thanks to Serge Zaitsev for his amazing original [webview](https://github.com/zserge/webview) package, and to the maintainers of its actively maintained continuation, [webview_go](https://github.com/webview/webview_go)!
