@@ -1,14 +1,14 @@
-//go:build jev
-
-package main
+package autopilot
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/sausheong/invadersapp/internal/game"
 )
 
 func TestStatsThreatEscapedAfterWindow(t *testing.T) {
-	var s pilotStats
+	var s stats
 	s.add(&action{Situation: "threat", Move: moveLeft})
 	for i := 0; i < outcomeWindow; i++ {
 		s.tick()
@@ -22,11 +22,11 @@ func TestStatsThreatEscapedAfterWindow(t *testing.T) {
 }
 
 func TestStatsKilledWithinWindow(t *testing.T) {
-	var s pilotStats
+	var s stats
 	s.add(&action{Situation: "threat", Move: moveStay})
 	s.add(&action{Situation: "safe", Move: moveRight})
 	s.tick()
-	s.event(evCannonHit, false)
+	s.event(game.EvCannonHit, false)
 	if s.Threat != 1 || s.ThreatEscaped != 0 {
 		t.Errorf("threat=%d escaped=%d, want 1/0", s.Threat, s.ThreatEscaped)
 	}
@@ -39,15 +39,15 @@ func TestStatsKilledWithinWindow(t *testing.T) {
 }
 
 func TestStatsShotOutcomes(t *testing.T) {
-	var s pilotStats
+	var s stats
 	s.add(&action{Move: moveStay, FireProb: 0.9})
-	s.event(evShotFired, true)
-	s.event(evShotAlien, true)
+	s.event(game.EvShotFired, true)
+	s.event(game.EvShotAlien, true)
 	s.add(&action{Move: moveStay, FireProb: 0.9})
-	s.event(evShotFired, true)
-	s.event(evShotMissed, true)
-	s.event(evShotFired, false) // player's own shot isn't counted
-	s.event(evShotAlien, false)
+	s.event(game.EvShotFired, true)
+	s.event(game.EvShotMissed, true)
+	s.event(game.EvShotFired, false) // player's own shot isn't counted
+	s.event(game.EvShotAlien, false)
 
 	hit, total := s.hits()
 	if s.Fired != 2 || hit != 1 || total != 2 {
@@ -59,11 +59,11 @@ func TestStatsShotOutcomes(t *testing.T) {
 }
 
 func TestStatsCancelledShotNotCountedAsMiss(t *testing.T) {
-	var s pilotStats
+	var s stats
 	s.add(&action{Move: moveStay, FireProb: 0.9})
-	s.event(evShotFired, true)
-	s.event(evShotCancelled, true)
-	s.event(evCannonHit, true)
+	s.event(game.EvShotFired, true)
+	s.event(game.EvShotCancelled, true)
+	s.event(game.EvCannonHit, true)
 	if hit, total := s.hits(); hit != 0 || total != 0 {
 		t.Errorf("hit=%d total=%d, want 0/0", hit, total)
 	}

@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"fmt"
@@ -32,16 +32,20 @@ func (g *Game) drawHUD(dst *image.RGBA) {
 	printLine(dst, 4, 12, fmt.Sprintf("SCORE %d", g.score), hudWhite)
 
 	hs := fmt.Sprintf("HIGH %d", g.highScore)
-	printLine(dst, gameWidth/2-len(hs)*4, 12, hs, hudWhite)
+	printLine(dst, Width/2-len(hs)*4, 12, hs, hudWhite)
 
-	pilotHUD(dst)
+	if autopilot != nil {
+		top, bottom := autopilot.HUD()
+		printLine(dst, Width-4-len(top)*8, 12, top, hudGreen)
+		printLine(dst, Width-4-len(bottom)*8, Height-4, bottom, hudGreen)
+	}
 
 	// Remaining lives as small cannon-sprite icons rather than a placeholder
 	// letter glyph, echoing the original arcade's row of ship icons.
 	if g.sprites != nil {
 		f := gift.New(gift.Crop(cannonSprite))
 		for i := 0; i < g.lives; i++ {
-			f.DrawAt(dst, g.sprites, image.Pt(4+i*22, gameHeight-16), gift.OverOperator)
+			f.DrawAt(dst, g.sprites, image.Pt(4+i*22, Height-16), gift.OverOperator)
 		}
 	}
 }

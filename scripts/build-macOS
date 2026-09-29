@@ -1,0 +1,6 @@
+#!/bin/sh
+# Builds the game into invaders.app. Arguments go to go build,
+# e.g. scripts/build-macOS -tags jev
+set -e
+cd "$(dirname "$0")/.."
+go build "$@" -o invaders.app/Contents/MacOS/invaders ./cmd/invaders

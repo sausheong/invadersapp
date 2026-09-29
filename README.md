@@ -2,11 +2,11 @@
 
 A small cross-platform desktop Space Invaders game written in Go. Every frame is drawn in Go and shown in a native webview window, which calls straight into Go through [webview_go](https://github.com/webview/webview_go)'s `Bind`. There's no game engine, GUI toolkit or web server.
 
-![Space Invaders](images/space-invaders.jpg)
+![Space Invaders](docs/images/space-invaders.jpg)
 
 The story behind the app is in the original article, [Create a simple cross-platform desktop game with Go](https://medium.com/sausheong/create-a-simple-cross-platform-desktop-game-with-go-8e5432128c9b). The game has changed a lot since then.
 
-![Playing Space Invaders](images/screen-play.png)
+![Playing Space Invaders](docs/images/screen-play.png)
 
 ## How to play
 
@@ -39,24 +39,30 @@ Requirements:
 All assets are embedded in the binary, so it runs straight from a checkout:
 
 ```sh
-go run .
+go run ./cmd/invaders
+```
+
+Or install it:
+
+```sh
+go install github.com/sausheong/invadersapp/cmd/invaders@latest
 ```
 
 To build a standalone binary:
 
 ```sh
-go build -o invaders                               # macOS / Linux
-go build -ldflags="-H windowsgui" -o invaders.exe  # Windows, without a console window
+go build -o invaders ./cmd/invaders                               # macOS / Linux
+go build -ldflags="-H windowsgui" -o invaders.exe ./cmd/invaders  # Windows, without a console window
 ```
 
 To build the macOS app bundle:
 
 ```sh
-./build-macOS
+scripts/build-macOS
 open invaders.app
 ```
 
-`build-macOS` passes any arguments to `go build`, e.g. `./build-macOS -tags jev`.
+`scripts/build-macOS` passes any arguments to `go build`, e.g. `scripts/build-macOS -tags jev`. The app binary isn't kept in git; build it, or download it from a release.
 
 Each [release](https://github.com/sausheong/invadersapp/releases) includes a prebuilt Apple Silicon app. It's unsigned, so right-click it and choose **Open** the first time.
 
@@ -65,7 +71,7 @@ Each [release](https://github.com/sausheong/invadersapp/releases) includes a pre
 [Jev](https://docs.typesafe.ai/introduction), TypeSafe's System One model, can play the game. The autopilot is compiled in only with the `jev` build tag; a normal build contains none of it.
 
 ```sh
-go build -tags jev -o invaders
+go build -tags jev -o invaders ./cmd/invaders
 TYPESAFE_API_KEY=... ./invaders -jev    # or press j during play
 ```
 
@@ -88,40 +94,37 @@ The running score is shown in the bottom-right corner. Every decision is logged 
 
 ## How it works
 
-- **Game loop** (`game.go`): a single goroutine owns the game state. Fifty times a second it reads input, steps the simulation, draws the frame with [gift](https://github.com/disintegration/gift), and publishes it as a PNG data URI with a sequence number.
-- **Window** (`main.go`): hosts a small embedded page (`public/html/game.html`) and binds three Go functions into it:
+- **Game loop** (`internal/game`): a single goroutine owns the game state. Fifty times a second it reads input, steps the simulation, draws the frame with [gift](https://github.com/disintegration/gift), and publishes it as a PNG data URI with a sequence number.
+- **Window** (`cmd/invaders`): hosts a small embedded page (`game.html`) and binds three Go functions into it:
   - `frame(lastSeq)` returns a new frame only when one is available.
   - `keyDown(code)` and `keyUp(code)` pass keyboard input straight to Go.
-- **Assets** (`assets.go`): the sprites, backgrounds, sounds and page are embedded with `//go:embed`.
-- **Sound** (`sound.go`): uses [beep](https://github.com/gopxl/beep); the sounds are decoded once at startup.
+- **Assets** (`internal/assets`): the sprites, backgrounds, sounds and page are embedded with `//go:embed`. Sounds play through [beep](https://github.com/gopxl/beep) and are decoded once at startup.
+- **Autopilot** (`internal/autopilot`): the game knows nothing about Jev. It defines a small `Autopilot` interface and gives an autopilot a read-only snapshot (`game.View`) each tick. `cmd/invaders/jev.go`, compiled only with `-tags jev`, plugs the Jev autopilot in.
 
 ```
-main.go         window, Bind wiring, quit handling
-game.go         game state, rules and the game loop
-invaders.go     sprites and collision
-render.go       drawing a frame; hud.go draws the score and lives
-shield.go       destructible shields
-input.go        keyboard input shared with the game loop
-frame.go        frame encoding and publishing
-assets.go       embedded assets; sound.go plays them
-highscore.go    high score persistence
-jev_*.go        Jev autopilot (built with -tags jev); nojev.go is its no-op stand-in
-public/         page, sprite sheet, backgrounds, sounds
-invaders.app/   macOS app bundle
+cmd/invaders/          the app: window, Bind wiring, flags
+  main.go
+  jev.go               -tags jev: plugs in the autopilot
+internal/game/         rules, state, drawing, input, high score
+internal/assets/       embedded page, images and sounds; sound playback
+internal/autopilot/    Jev autopilot: forecasting, decisions, scoring
+internal/typesafe/     minimal TypeSafe System One API client
+docs/                  images and articles
+scripts/build-macOS    builds invaders.app
+invaders.app/          macOS app bundle (the binary is built, not committed)
 ```
 
 ## Tests
 
 ```sh
-go test ./...                               # game
-go test -tags jev ./...                     # game and autopilot
-go test -tags jev,live -run TestJev -v .    # autopilot against the live TypeSafe API
-INVADERS_SNAPSHOT_DIR=/tmp/snap go test -run TestRenderSnapshots .   # render screenshots
+go test ./...                                              # everything, no network
+go test -tags live -run TestJev -v ./internal/autopilot    # autopilot against the live TypeSafe API
+INVADERS_SNAPSHOT_DIR=/tmp/snap go test -run TestRenderSnapshots ./internal/game   # render screenshots
 ```
 
 ## Screenshots
 
-![Title screen](images/screen-title.png) ![Game over](images/screen-gameover.png)
+![Title screen](docs/images/screen-title.png) ![Game over](docs/images/screen-gameover.png)
 
 ## Credits
 

@@ -1,6 +1,4 @@
-//go:build jev
-
-package main
+package autopilot
 
 import (
 	"encoding/json"
@@ -10,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sausheong/invadersapp/internal/game"
 )
 
 // Scoring the Jev autopilot. Every Jev decision becomes an action; its
@@ -26,12 +26,12 @@ const (
 )
 
 // shot outcomes
-var shotNames = map[gameEvent]string{
-	evShotAlien:     "hit alien",
-	evShotUFO:       "hit ufo",
-	evShotMissed:    "missed",
-	evShotShield:    "hit own shield",
-	evShotCancelled: "cancelled",
+var shotNames = map[game.Event]string{
+	game.EvShotAlien:     "hit alien",
+	game.EvShotUFO:       "hit ufo",
+	game.EvShotMissed:    "missed",
+	game.EvShotShield:    "hit own shield",
+	game.EvShotCancelled: "cancelled",
 }
 
 // action is one Jev decision and what came of it.
@@ -53,10 +53,10 @@ type action struct {
 	shotPending bool
 }
 
-// pilotStats tallies actions. Actions are added and resolved on the game
+// stats tallies actions. Actions are added and resolved on the game
 // goroutine; the summary is read from the main thread at exit, hence the
 // mutex.
-type pilotStats struct {
+type stats struct {
 	mu      sync.Mutex
 	clock   int       // playing ticks seen, pauses excluded
 	pending []*action // moves still inside their outcome window
@@ -74,21 +74,21 @@ type pilotStats struct {
 
 // fireStale counts a fire decision dropped because the cannon's line of
 // fire changed between Jev's decision and the tick it would have fired.
-func (s *pilotStats) fireStale() {
+func (s *stats) fireStale() {
 	s.mu.Lock()
 	s.Stale++
 	s.mu.Unlock()
 }
 
 // fireBlocked counts a fire decision dropped because a shot was in flight.
-func (s *pilotStats) fireBlocked() {
+func (s *stats) fireBlocked() {
 	s.mu.Lock()
 	s.Blocked++
 	s.mu.Unlock()
 }
 
 // add records a new decision at the current clock.
-func (s *pilotStats) add(a *action) {
+func (s *stats) add(a *action) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	a.Tick = s.clock
@@ -100,7 +100,7 @@ func (s *pilotStats) add(a *action) {
 
 // tick advances the clock one playing tick and resolves every move whose
 // window has passed without the cannon being hit.
-func (s *pilotStats) tick() {
+func (s *stats) tick() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.clock++
@@ -120,18 +120,18 @@ func (s *pilotStats) tick() {
 }
 
 // event handles a game outcome reported through Game.onEvent.
-func (s *pilotStats) event(ev gameEvent, fromPilot bool) {
+func (s *stats) event(ev game.Event, fromPilot bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch ev {
-	case evCannonHit:
+	case game.EvCannonHit:
 		for _, a := range s.pending {
 			s.resolve(a, outcomeKilled)
 		}
 		s.pending = nil
-	case evShotFired:
+	case game.EvShotFired:
 		if s.shooter != nil {
-			s.finishShot(shotNames[evShotCancelled])
+			s.finishShot(shotNames[game.EvShotCancelled])
 		}
 		if fromPilot {
 			// the shot belongs to the latest action that asked to fire
@@ -152,7 +152,7 @@ func (s *pilotStats) event(ev gameEvent, fromPilot bool) {
 }
 
 // finishShot records how the in-flight pilot shot ended.
-func (s *pilotStats) finishShot(name string) {
+func (s *stats) finishShot(name string) {
 	a := s.shooter
 	s.shooter = nil
 	a.Shot, a.shotPending = name, false
@@ -167,7 +167,7 @@ func (s *pilotStats) finishShot(name string) {
 
 // resolve records a move outcome and logs the action unless its shot is
 // still in flight (finishShot logs it then).
-func (s *pilotStats) resolve(a *action, outcome string) {
+func (s *stats) resolve(a *action, outcome string) {
 	a.Outcome = outcome
 	success := outcome != outcomeKilled
 	if a.Situation == "threat" {
@@ -199,7 +199,7 @@ func (s *pilotStats) resolve(a *action, outcome string) {
 }
 
 // write appends one resolved action to the JSONL log, if one is open.
-func (s *pilotStats) write(a *action) {
+func (s *stats) write(a *action) {
 	if s.logFile == nil {
 		return
 	}
@@ -210,10 +210,10 @@ func (s *pilotStats) write(a *action) {
 
 // hits returns shots that hit an alien or the UFO, and resolved shots
 // (fired shots excluding cancelled and still in flight).
-func (s *pilotStats) hits() (hit, total int) {
-	hit = s.Shots[shotNames[evShotAlien]] + s.Shots[shotNames[evShotUFO]]
+func (s *stats) hits() (hit, total int) {
+	hit = s.Shots[shotNames[game.EvShotAlien]] + s.Shots[shotNames[game.EvShotUFO]]
 	for name, n := range s.Shots {
-		if name != shotNames[evShotCancelled] {
+		if name != shotNames[game.EvShotCancelled] {
 			total += n
 		}
 	}
@@ -221,7 +221,7 @@ func (s *pilotStats) hits() (hit, total int) {
 }
 
 // hudText is the compact running score shown during play.
-func (s *pilotStats) hudText() string {
+func (s *stats) hudText() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.Threat == 0 && len(s.Shots) == 0 {
@@ -232,7 +232,7 @@ func (s *pilotStats) hudText() string {
 }
 
 // summary is the end-of-session report.
-func (s *pilotStats) summary() string {
+func (s *stats) summary() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.Threat+s.Safe == 0 && s.Fired == 0 {
@@ -251,7 +251,7 @@ func (s *pilotStats) summary() string {
 	}
 	hit, shots := s.hits()
 	fmt.Fprintf(&b, "  Shots: %d fired, %d/%d hit %s; %d fire decisions dropped as stale, %d while a shot was in flight\n", s.Fired, hit, shots, pct(hit, shots), s.Stale, s.Blocked)
-	for _, ev := range []gameEvent{evShotAlien, evShotUFO, evShotMissed, evShotShield, evShotCancelled} {
+	for _, ev := range []game.Event{game.EvShotAlien, game.EvShotUFO, game.EvShotMissed, game.EvShotShield, game.EvShotCancelled} {
 		if n := s.Shots[shotNames[ev]]; n > 0 {
 			fmt.Fprintf(&b, "    %-15s %d\n", shotNames[ev], n)
 		}
@@ -266,20 +266,20 @@ func pct(n, d int) string {
 	return fmt.Sprintf("(%.0f%%)", 100*float64(n)/float64(d))
 }
 
-// statsLogPath is where resolved actions are logged, one JSON per line.
-func statsLogPath() string {
-	return filepath.Join(filepath.Dir(highScorePath()), "jev-actions.jsonl")
+// logPath is where resolved actions are logged, one JSON per line.
+func logPath() string {
+	return filepath.Join(game.DataDir(), "jev-actions.jsonl")
 }
 
 // summaryPath is where the session summary is kept up to date.
 func summaryPath() string {
-	return filepath.Join(filepath.Dir(statsLogPath()), "jev-summary.txt")
+	return filepath.Join(filepath.Dir(logPath()), "jev-summary.txt")
 }
 
 // openLog starts appending actions to the log file and keeps the summary
 // file current every few seconds, tolerating errors.
-func (s *pilotStats) openLog() {
-	path := statsLogPath()
+func (s *stats) openLog() {
+	path := logPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}
@@ -294,14 +294,14 @@ func (s *pilotStats) openLog() {
 }
 
 // writeSummary saves the current summary, once there is something to report.
-func (s *pilotStats) writeSummary() {
+func (s *stats) writeSummary() {
 	if sum := s.summary(); sum != "" {
 		os.WriteFile(summaryPath(), []byte(sum), 0o644)
 	}
 }
 
 // close writes the final summary and closes the log.
-func (s *pilotStats) close() {
+func (s *stats) close() {
 	s.writeSummary()
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"fmt"
@@ -9,18 +9,19 @@ import (
 )
 
 var hudRed = color.RGBA{220, 40, 40, 255}
+var hudGreen = color.RGBA{80, 220, 80, 255}
 var shieldGreen = color.RGBA{40, 220, 90, 255}
 var ufoRed = color.RGBA{220, 40, 40, 255}
 var sparkOrange = color.RGBA{255, 160, 0, 255}
 
-// render paints the current game state into dst (gameWidth x gameHeight).
+// render paints the current game state into dst (Width x Height).
 // It's the only place that touches images: step() never draws anything,
 // which is what makes step() unit-testable without a GUI or real assets.
 func (g *Game) render(dst *image.RGBA) {
 	switch g.state {
-	case stateTitle:
+	case StateTitle:
 		g.renderTitle(dst)
-	case stateGameOver:
+	case StateGameOver:
 		g.renderGameOver(dst)
 	default:
 		g.renderPlaying(dst)

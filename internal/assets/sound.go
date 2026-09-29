@@ -1,4 +1,4 @@
-package main
+package assets
 
 import (
 	"bytes"
@@ -62,10 +62,10 @@ func preloadSound(name string) error {
 	return nil
 }
 
-// loadSounds initializes the speaker and preloads all game sounds. It's
+// LoadSounds initializes the speaker and preloads all game sounds. It's
 // tolerant of failures (e.g. no audio device available) so the game can
 // still be played, just silently, rather than crashing.
-func loadSounds() {
+func LoadSounds() {
 	if err := initSpeaker(); err != nil {
 		fmt.Println("warning: could not init speaker, sound disabled:", err)
 		return
@@ -78,7 +78,7 @@ func loadSounds() {
 }
 
 // play a sound
-func playSound(name string) {
+func PlaySound(name string) {
 	buf, ok := soundBuffers[name]
 	if !ok {
 		return

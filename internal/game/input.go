@@ -1,4 +1,4 @@
-package main
+package game
 
 import "sync"
 
@@ -16,8 +16,8 @@ type Input struct {
 }
 
 // inputState holds the raw key state shared between the UI thread (webview
-// Bind callbacks calling keyDown/keyUp) and the single game loop goroutine.
-// It must stay cheap: keyDown/keyUp are called directly on the UI thread.
+// Bind callbacks calling KeyDown/KeyUp) and the single game loop goroutine.
+// It must stay cheap: KeyDown/KeyUp are called directly on the UI thread.
 type inputState struct {
 	mu sync.Mutex
 
@@ -42,9 +42,9 @@ const (
 	keyJ     = 74
 )
 
-// keyDown handles a key press bound from the webview UI thread. Fast and
+// KeyDown handles a key press bound from the webview UI thread. Fast and
 // thread-safe: it only ever flips a few booleans behind a mutex.
-func keyDown(code int) {
+func KeyDown(code int) {
 	input.mu.Lock()
 	defer input.mu.Unlock()
 	switch code {
@@ -65,8 +65,8 @@ func keyDown(code int) {
 	}
 }
 
-// keyUp handles a key release bound from the webview UI thread.
-func keyUp(code int) {
+// KeyUp handles a key release bound from the webview UI thread.
+func KeyUp(code int) {
 	input.mu.Lock()
 	defer input.mu.Unlock()
 	switch code {

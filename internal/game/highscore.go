@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"encoding/json"
@@ -13,11 +13,18 @@ type highScoreData struct {
 // highScorePath returns the path to the persisted high score file, falling
 // back to the current directory if os.UserConfigDir isn't available.
 func highScorePath() string {
+	return filepath.Join(DataDir(), "highscore.json")
+}
+
+// DataDir is where the game keeps its files (the high score, and the
+// autopilot's logs): an invaders folder in the user config directory,
+// or the current directory if there isn't one.
+func DataDir() string {
 	dir, err := os.UserConfigDir()
 	if err != nil || dir == "" {
-		dir = "."
+		return "invaders"
 	}
-	return filepath.Join(dir, "invaders", "highscore.json")
+	return filepath.Join(dir, "invaders")
 }
 
 // loadHighScore reads the persisted high score, tolerating any error by

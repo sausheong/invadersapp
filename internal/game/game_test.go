@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"image"
@@ -11,8 +11,8 @@ func newPlayingGame(t *testing.T) *Game {
 	t.Helper()
 	g := newGame()
 	g.step(Input{Start: true})
-	if g.state != statePlaying {
-		t.Fatalf("expected state statePlaying after Start, got %v", g.state)
+	if g.state != StatePlaying {
+		t.Fatalf("expected state StatePlaying after Start, got %v", g.state)
 	}
 	return g
 }
@@ -60,7 +60,7 @@ func TestWaveAdvancesWhenAllAliensDead(t *testing.T) {
 	if aliveAlienCount(g.aliens) != len(g.aliens) {
 		t.Errorf("expected a fresh, fully-alive formation for the new wave")
 	}
-	if g.state != statePlaying {
+	if g.state != StatePlaying {
 		t.Errorf("expected to still be playing after a wave clear, got state %v", g.state)
 	}
 }
@@ -99,10 +99,10 @@ func TestCannonHitDecrementsLivesAndRespawns(t *testing.T) {
 	if g.cannonExploding {
 		t.Error("expected the cannon explosion to be over")
 	}
-	if g.state != statePlaying {
-		t.Errorf("expected to respawn into statePlaying, got %v", g.state)
+	if g.state != StatePlaying {
+		t.Errorf("expected to respawn into StatePlaying, got %v", g.state)
 	}
-	wantX := (gameWidth - g.cannon.size.Dx()) / 2
+	wantX := (Width - g.cannon.size.Dx()) / 2
 	if g.cannon.Position.X != wantX {
 		t.Errorf("expected cannon respawned at center x=%d, got %d", wantX, g.cannon.Position.X)
 	}
@@ -117,8 +117,8 @@ func TestGameOverWhenLivesReachZero(t *testing.T) {
 			g.step(Input{})
 		}
 	}
-	if g.state != stateGameOver {
-		t.Fatalf("expected stateGameOver once lives run out, got %v", g.state)
+	if g.state != StateGameOver {
+		t.Fatalf("expected StateGameOver once lives run out, got %v", g.state)
 	}
 }
 
@@ -128,7 +128,7 @@ func TestGameOverByInvasion(t *testing.T) {
 		g.aliens[i].Position.Y = g.cannon.Position.Y
 	}
 	g.advanceFormation()
-	if g.state != stateGameOver {
+	if g.state != StateGameOver {
 		t.Fatalf("expected invasion to end the game, got state %v", g.state)
 	}
 }
@@ -146,7 +146,7 @@ func TestCannonClampedInsideFrame(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		g.step(Input{Right: true})
 	}
-	maxX := gameWidth - g.cannon.size.Dx()
+	maxX := Width - g.cannon.size.Dx()
 	if g.cannon.Position.X > maxX {
 		t.Errorf("expected cannon clamped at x<=%d, got %d", maxX, g.cannon.Position.X)
 	}
@@ -159,7 +159,7 @@ func TestBombsOffScreenArePruned(t *testing.T) {
 	g.bombs = []Sprite{{
 		size:     bombSprite,
 		Filter:   gift.New(gift.Crop(bombSprite)),
-		Position: image.Pt(200, gameHeight+5),
+		Position: image.Pt(200, Height+5),
 		Status:   true,
 	}}
 	g.moveBombs()
@@ -211,7 +211,7 @@ func TestBombDamagesShield(t *testing.T) {
 	g.bombs = []Sprite{{
 		size:     bombSprite,
 		Filter:   gift.New(gift.Crop(bombSprite)),
-		Position: image.Pt(center.X, center.Y-bombSpeed), // moveBombs adds bombSpeed before checking
+		Position: image.Pt(center.X, center.Y-BombSpeed), // moveBombs adds BombSpeed before checking
 		Status:   true,
 	}}
 	before := countIntact(s)
@@ -291,20 +291,20 @@ func TestPauseStopsSimulation(t *testing.T) {
 func TestQuitDuringPlayReturnsToTitle(t *testing.T) {
 	g := newPlayingGame(t)
 	g.step(Input{Quit: true})
-	if g.state != stateTitle {
+	if g.state != StateTitle {
 		t.Fatalf("expected quitting during play to return to the title screen, got %v", g.state)
 	}
 }
 
 func TestQuitOnTitleCallsQuitFunc(t *testing.T) {
 	called := false
-	old := quitFunc
-	quitFunc = func() { called = true }
-	defer func() { quitFunc = old }()
+	old := QuitFunc
+	QuitFunc = func() { called = true }
+	defer func() { QuitFunc = old }()
 
 	g := newGame()
 	g.step(Input{Quit: true})
 	if !called {
-		t.Error("expected quitFunc to be called when quitting from the title screen")
+		t.Error("expected QuitFunc to be called when quitting from the title screen")
 	}
 }

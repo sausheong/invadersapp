@@ -1,3 +1,5 @@
 .DS_Store
-invadersapp
 .env
+/invadersapp
+/invaders
+/invaders.app/Contents/MacOS/

@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ func init() {
 
 // createFrame PNG-encodes img (BestSpeed, since this runs every tick at 50
 // fps) and publishes it as the current frame, bumping the sequence number so
-// currentFrame's caller can tell a new frame has arrived.
+// CurrentFrame's caller can tell a new frame has arrived.
 func createFrame(img image.Image) {
 	var buf bytes.Buffer
 	enc := png.Encoder{CompressionLevel: png.BestSpeed}
@@ -28,8 +28,8 @@ func createFrame(img image.Image) {
 	frameSeq.Add(1)
 }
 
-// currentFrame returns the latest published frame and its sequence number.
+// CurrentFrame returns the latest published frame and its sequence number.
 // Thread-safe and cheap: no encoding happens here, just an atomic read.
-func currentFrame() (seq uint64, src string) {
+func CurrentFrame() (seq uint64, src string) {
 	return frameSeq.Load(), frameData.Load().(string)
 }

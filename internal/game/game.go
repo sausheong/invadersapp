@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"image"
@@ -7,15 +7,17 @@ import (
 	"time"
 
 	"github.com/disintegration/gift"
+
+	"github.com/sausheong/invadersapp/internal/assets"
 )
 
-// gameWidth and gameHeight are the logical frame size the whole game is
+// Width and Height are the logical frame size the whole game is
 // drawn at; the platform code scales the window up from this.
-const gameWidth, gameHeight = 400, 300
+const Width, Height = 400, 300
 
-// quitFunc is set by main to a thread-safe way of closing the app window.
+// QuitFunc is set by main to a thread-safe way of closing the app window.
 // It's nil in tests, where quitting is a no-op.
-var quitFunc func()
+var QuitFunc func()
 
 // formation layout
 const (
@@ -32,10 +34,13 @@ const (
 
 // speeds and timing, all in units of one tick (the game runs at 50 ticks/sec)
 const (
-	cannonSpeed = 3 // px per tick while a direction key is held
-	beamSpeed   = 10
-	bombSpeed   = 4
-	cannonY     = 250
+	CannonSpeed = 3 // px per tick while a direction key is held
+	BeamSpeed   = 10
+	BombSpeed   = 4
+	CannonY     = 250
+	BeamOffsetX = 7  // beam starts this far right of the cannon's left edge
+	AlienStep   = 3  // px the formation moves sideways each move
+	AlienDrop   = 10 // px the formation drops when it reverses at an edge
 
 	baseMoveInterval = 10 // ticks between alien moves, wave 1, full formation
 	minMoveInterval  = 2  // fastest the formation can ever move
@@ -45,19 +50,19 @@ const (
 
 	bombProbabilityPerColumn = 0.01 // per column, per tick
 
-	ufoSpeed       = 2
+	UFOSpeed       = 2
 	ufoY           = 14
 	ufoMinCooldown = 600 // ticks (12s) before a ufo can appear again
 	ufoJitterTicks = 600 // extra random delay on top of the minimum
 	startingLives  = 3
 )
 
-type gameState int
+type State int
 
 const (
-	stateTitle gameState = iota
-	statePlaying
-	stateGameOver
+	StateTitle State = iota
+	StatePlaying
+	StateGameOver
 )
 
 // effect is a transient, purely cosmetic marker (an explosion spark) that
@@ -67,21 +72,21 @@ type effect struct {
 	ticksLeft int
 }
 
-// gameEvent is an outcome reported through Game.onEvent.
-type gameEvent int
+// Event is an outcome reported through Game.onEvent.
+type Event int
 
 const (
-	evCannonHit gameEvent = iota
-	evShotFired
-	evShotAlien
-	evShotUFO
-	evShotMissed
-	evShotShield
-	evShotCancelled
+	EvCannonHit Event = iota
+	EvShotFired
+	EvShotAlien
+	EvShotUFO
+	EvShotMissed
+	EvShotShield
+	EvShotCancelled
 )
 
 // emit reports an outcome to onEvent, if anyone is listening.
-func (g *Game) emit(ev gameEvent) {
+func (g *Game) emit(ev Event) {
 	if g.onEvent != nil {
 		g.onEvent(ev, g.beamFromPilot)
 	}
@@ -92,7 +97,7 @@ func (g *Game) emit(ev gameEvent) {
 // (no logic). Keeping the two separate is what makes step() unit-testable
 // without a GUI or any real assets.
 type Game struct {
-	state  gameState
+	state  State
 	paused bool
 
 	aliens  []Sprite
@@ -111,7 +116,7 @@ type Game struct {
 
 	// onEvent, if set, is told about outcomes the autopilot stats track:
 	// cannon hits and how each shot ended. Nil in tests.
-	onEvent func(ev gameEvent, fromPilot bool)
+	onEvent func(ev Event, fromPilot bool)
 
 	cannonExploding bool
 	explodeTicks    int
@@ -137,7 +142,7 @@ type Game struct {
 	persistHighScore func(int)
 	savedHighScore   int // last high score handed to persistHighScore
 
-	// images, injected by runGameLoop from assetImage(); left nil in tests,
+	// images, injected by runGameLoop from assets.Image(); left nil in tests,
 	// which never call render() with the default nil rng-seeded Game.
 	sprites        image.Image
 	background     image.Image
@@ -152,7 +157,7 @@ type Game struct {
 // score and wiring up persistHighScore before the game actually runs.
 func newGame() *Game {
 	return &Game{
-		state: stateTitle,
+		state: StateTitle,
 		rng:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
@@ -191,8 +196,8 @@ func buildAliens(wave int) []Sprite {
 // cannon row.
 func buildShields() []*Shield {
 	const n = 4
-	y := cannonY - 40
-	spacing := (gameWidth - n*shieldWidth) / (n + 1)
+	y := CannonY - 40
+	spacing := (Width - n*shieldWidth) / (n + 1)
 	shields := make([]*Shield, 0, n)
 	for i := 0; i < n; i++ {
 		x := spacing*(i+1) + shieldWidth*i
@@ -223,7 +228,7 @@ func (g *Game) startNewGame() {
 		size:     cannonSprite,
 		Filter:   gift.New(gift.Crop(cannonSprite)),
 		FilterE:  gift.New(gift.Crop(cannonExplode)),
-		Position: image.Pt((gameWidth-cannonSprite.Dx())/2, cannonY),
+		Position: image.Pt((Width-cannonSprite.Dx())/2, CannonY),
 		Status:   true,
 	}
 	g.beam = Sprite{size: beamSprite, Filter: gift.New(gift.Crop(beamSprite))}
@@ -251,21 +256,21 @@ func (g *Game) startNextWave() {
 // never touches an image: all drawing happens in render().
 func (g *Game) step(in Input) {
 	switch g.state {
-	case stateTitle, stateGameOver:
+	case StateTitle, StateGameOver:
 		if in.Quit {
-			if quitFunc != nil {
-				quitFunc()
+			if QuitFunc != nil {
+				QuitFunc()
 			}
 			return
 		}
 		if in.Start {
 			g.startNewGame()
-			g.state = statePlaying
+			g.state = StatePlaying
 		}
-	case statePlaying:
+	case StatePlaying:
 		if in.Quit {
 			g.saveHighScore()
-			g.state = stateTitle
+			g.state = StateTitle
 			return
 		}
 		if in.Pause {
@@ -304,7 +309,7 @@ func (g *Game) stepPlaying(in Input) {
 	g.updateUFO()
 	g.checkBeamHits()
 
-	if g.state == statePlaying && aliveAlienCount(g.aliens) == 0 {
+	if g.state == StatePlaying && aliveAlienCount(g.aliens) == 0 {
 		g.startNextWave()
 	}
 }
@@ -313,12 +318,12 @@ func (g *Game) stepPlaying(in Input) {
 // frame (BUG FIX: the original let it fly off either edge).
 func (g *Game) moveCannon(in Input) {
 	if in.Left {
-		g.cannon.Position.X -= cannonSpeed
+		g.cannon.Position.X -= CannonSpeed
 	}
 	if in.Right {
-		g.cannon.Position.X += cannonSpeed
+		g.cannon.Position.X += CannonSpeed
 	}
-	minX, maxX := 0, gameWidth-g.cannon.size.Dx()
+	minX, maxX := 0, Width-g.cannon.size.Dx()
 	if g.cannon.Position.X < minX {
 		g.cannon.Position.X = minX
 	}
@@ -328,27 +333,27 @@ func (g *Game) moveCannon(in Input) {
 }
 
 // handleFire fires a single beam on a fresh press, as in the original
-// (only one beam may be on screen at a time). playSound only runs when a
+// (only one beam may be on screen at a time). assets.PlaySound only runs when a
 // beam is actually fired, not on every fire keypress.
 func (g *Game) handleFire(in Input) {
 	if !in.Fire || g.beamActive {
 		return
 	}
-	g.beam.Position = image.Pt(g.cannon.Position.X+7, g.cannon.Position.Y-beamSprite.Dy())
+	g.beam.Position = image.Pt(g.cannon.Position.X+BeamOffsetX, g.cannon.Position.Y-beamSprite.Dy())
 	g.beamActive = true
 	g.beamFromPilot = in.PilotFire
-	g.emit(evShotFired)
-	playSound("shoot")
+	g.emit(EvShotFired)
+	assets.PlaySound("shoot")
 }
 
 func (g *Game) moveBeam() {
 	if !g.beamActive {
 		return
 	}
-	g.beam.Position.Y -= beamSpeed
+	g.beam.Position.Y -= BeamSpeed
 	if g.beam.Position.Y+beamSprite.Dy() < 0 {
 		g.beamActive = false
-		g.emit(evShotMissed)
+		g.emit(EvShotMissed)
 		return
 	}
 	for _, s := range g.shields {
@@ -358,7 +363,7 @@ func (g *Game) moveBeam() {
 		if p, ok := shieldImpactPoint(g.beam.rect(), s); ok {
 			s.damage(p, 2)
 			g.beamActive = false
-			g.emit(evShotShield)
+			g.emit(EvShotShield)
 			return
 		}
 	}
@@ -400,16 +405,16 @@ func (g *Game) advanceFormation() {
 		return
 	}
 	minX, maxX := aliveAlienXExtent(g.aliens)
-	step := 3 * g.alienDirection
+	step := AlienStep * g.alienDirection
 
-	hitEdge := (g.alienDirection > 0 && maxX+step > gameWidth) ||
+	hitEdge := (g.alienDirection > 0 && maxX+step > Width) ||
 		(g.alienDirection < 0 && minX+step < 0)
 
 	if hitEdge {
 		g.alienDirection *= -1
 		for i := range g.aliens {
 			if g.aliens[i].Status {
-				g.aliens[i].Position.Y += 10
+				g.aliens[i].Position.Y += AlienDrop
 			}
 		}
 	} else {
@@ -450,8 +455,8 @@ func (g *Game) dropBombs() {
 func (g *Game) moveBombs() {
 	kept := g.bombs[:0]
 	for _, b := range g.bombs {
-		b.Position.Y += bombSpeed
-		if b.Position.Y > gameHeight {
+		b.Position.Y += BombSpeed
+		if b.Position.Y > Height {
 			continue // prune bombs that leave the screen
 		}
 
@@ -484,27 +489,27 @@ func (g *Game) moveBombs() {
 // follows in stepPlaying.
 func (g *Game) hitCannon() {
 	if g.beamActive {
-		g.emit(evShotCancelled)
+		g.emit(EvShotCancelled)
 	}
-	g.emit(evCannonHit)
+	g.emit(EvCannonHit)
 	g.cannonExploding = true
 	g.explodeTicks = cannonExplosionTicks
 	g.lives--
 	g.bombs = nil
 	g.beamActive = false
-	playSound("explosion")
+	assets.PlaySound("explosion")
 }
 
 // respawnCannon puts the cannon back at center with a clean slate.
 func (g *Game) respawnCannon() {
-	g.cannon.Position = image.Pt((gameWidth-g.cannon.size.Dx())/2, cannonY)
+	g.cannon.Position = image.Pt((Width-g.cannon.size.Dx())/2, CannonY)
 	g.bombs = nil
 	g.beamActive = false
 }
 
 // finishGame ends the round and saves the high score if it was beaten.
 func (g *Game) finishGame() {
-	g.state = stateGameOver
+	g.state = StateGameOver
 	g.saveHighScore()
 }
 
@@ -545,7 +550,7 @@ func (g *Game) checkBeamHits() {
 		if collide(g.beam, g.aliens[i]) {
 			g.killAlien(i)
 			g.beamActive = false
-			g.emit(evShotAlien)
+			g.emit(EvShotAlien)
 			return
 		}
 	}
@@ -554,8 +559,8 @@ func (g *Game) checkBeamHits() {
 		g.spawnEffect(g.ufo.Position)
 		g.ufoActive = false
 		g.beamActive = false
-		g.emit(evShotUFO)
-		playSound("invaderkilled")
+		g.emit(EvShotUFO)
+		assets.PlaySound("invaderkilled")
 	}
 }
 
@@ -564,7 +569,7 @@ func (g *Game) killAlien(i int) {
 	a.Status = false
 	g.addScore(a.Points)
 	g.spawnEffect(a.Position)
-	playSound("invaderkilled")
+	assets.PlaySound("invaderkilled")
 }
 
 // addScore raises the live score and keeps the on-screen high score in sync
@@ -596,8 +601,8 @@ func (g *Game) tickEffects() {
 
 func (g *Game) updateUFO() {
 	if g.ufoActive {
-		g.ufo.Position.X += ufoSpeed * g.ufoDir
-		if g.ufo.Position.X < -20 || g.ufo.Position.X > gameWidth+20 {
+		g.ufo.Position.X += UFOSpeed * g.ufoDir
+		if g.ufo.Position.X < -20 || g.ufo.Position.X > Width+20 {
 			g.ufoActive = false
 			g.ufoTicks = g.randomUFOInterval()
 		}
@@ -612,7 +617,7 @@ func (g *Game) updateUFO() {
 func (g *Game) spawnUFO() {
 	dir, x := 1, -20
 	if g.rng.Intn(2) == 0 {
-		dir, x = -1, gameWidth+20
+		dir, x = -1, Width+20
 	}
 	points := []int{50, 100, 150, 300}[g.rng.Intn(4)]
 	g.ufo = Sprite{size: image.Rect(0, 0, 16, 7), Position: image.Pt(x, ufoY), Status: true, Points: points}
@@ -717,12 +722,12 @@ func lowestAlivePerColumn(aliens []Sprite) []int {
 	return idxs
 }
 
-// startGame starts the single game loop goroutine, idempotently: calling it
+// Start starts the single game loop goroutine, idempotently: calling it
 // more than once (main only ever calls it once, but this keeps it safe) has
 // no extra effect.
 var gameOnce sync.Once
 
-func startGame() {
+func Start() {
 	gameOnce.Do(func() {
 		g := newGame()
 		go runGameLoop(g)
@@ -735,24 +740,31 @@ func startGame() {
 // newGame(), so unit tests can build a Game without touching the
 // filesystem.
 func runGameLoop(g *Game) {
-	g.sprites = assetImage("images/sprites.png")
-	g.background = assetImage("images/bg.png")
-	g.startScreen = assetImage("images/start.png")
-	g.gameOverScreen = assetImage("images/gameover.png")
+	g.sprites = assets.Image("images/sprites.png")
+	g.background = assets.Image("images/bg.png")
+	g.startScreen = assets.Image("images/start.png")
+	g.gameOverScreen = assets.Image("images/gameover.png")
 
 	g.highScore = loadHighScore()
 	g.savedHighScore = g.highScore
 	g.persistHighScore = saveHighScore
-	pilotAttach(g)
+	if autopilot != nil {
+		g.onEvent = autopilot.Event
+	}
 
 	ticker := time.NewTicker(time.Second / 50)
 	defer ticker.Stop()
 	for range ticker.C {
 		in := input.snapshot()
-		g.step(pilotInput(g, in))
-		pilotAfterStep(g)
+		if autopilot != nil {
+			in = autopilot.Input(g.view(), in)
+		}
+		g.step(in)
+		if autopilot != nil {
+			autopilot.Observe(g.view())
+		}
 
-		dst := image.NewRGBA(image.Rect(0, 0, gameWidth, gameHeight))
+		dst := image.NewRGBA(image.Rect(0, 0, Width, Height))
 		g.render(dst)
 		createFrame(dst)
 	}

@@ -1,4 +1,4 @@
-package main
+package game
 
 import (
 	"image"
@@ -9,7 +9,7 @@ import (
 )
 
 // TestRenderSnapshots exercises the real rendering path end to end, using
-// the actual game assets decoded straight from disk (never assetImage,
+// the actual game assets decoded straight from disk (never assets.Image,
 // which belongs to the platform code and isn't available to a hermetic
 // test). It's skipped unless INVADERS_SNAPSHOT_DIR is set, since its whole
 // purpose is to write PNG snapshots for a human (or another verifier) to
@@ -24,7 +24,7 @@ func TestRenderSnapshots(t *testing.T) {
 	}
 
 	load := func(name string) image.Image {
-		f, err := os.Open(filepath.Join("public", "images", name))
+		f, err := os.Open(filepath.Join("..", "assets", "public", "images", name))
 		if err != nil {
 			t.Fatalf("open %s: %v", name, err)
 		}
@@ -44,7 +44,7 @@ func TestRenderSnapshots(t *testing.T) {
 
 	save := func(name string) {
 		t.Helper()
-		dst := image.NewRGBA(image.Rect(0, 0, gameWidth, gameHeight))
+		dst := image.NewRGBA(image.Rect(0, 0, Width, Height))
 		g.render(dst)
 		f, err := os.Create(filepath.Join(dir, name))
 		if err != nil {
@@ -86,7 +86,7 @@ func TestRenderSnapshots(t *testing.T) {
 	// is 600+ ticks, longer than this test's scripted play).
 	g.ufoActive = true
 	g.ufoDir = 1
-	g.ufo = Sprite{size: image.Rect(0, 0, 16, 7), Position: image.Pt(gameWidth/2-8, ufoY), Status: true, Points: 100}
+	g.ufo = Sprite{size: image.Rect(0, 0, 16, 7), Position: image.Pt(Width/2-8, ufoY), Status: true, Points: 100}
 	g.step(Input{})
 	save("play-ufo.png")
 	g.ufoActive = false
@@ -106,18 +106,18 @@ func TestRenderSnapshots(t *testing.T) {
 
 	// force a real, deterministic game over: one life left, hit again, and
 	// run the explosion out so finishGame() actually fires and state
-	// becomes stateGameOver (the previous version of this test relied on a
+	// becomes StateGameOver (the previous version of this test relied on a
 	// bomb colliding with the cannon within cannonExplosionTicks, which
 	// could silently fail to land if a natural mid-air bomb had already put
 	// the cannon into its explosion state during the scripted play above,
-	// producing a "gameover.png" that was actually still statePlaying).
+	// producing a "gameover.png" that was actually still StatePlaying).
 	g.lives = 1
 	g.hitCannon()
 	for i := 0; i < cannonExplosionTicks; i++ {
 		g.step(Input{})
 	}
-	if g.state != stateGameOver {
-		t.Fatalf("expected stateGameOver after running out lives, got state=%v", g.state)
+	if g.state != StateGameOver {
+		t.Fatalf("expected StateGameOver after running out lives, got state=%v", g.state)
 	}
 	save("gameover.png")
 }
